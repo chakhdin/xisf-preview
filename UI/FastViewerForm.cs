@@ -134,7 +134,6 @@ namespace XisfExplorerPreview
             _currentFilePath = filePath;
             _currentIndex = _folderFiles.IndexOf(filePath);
 
-            // 1. Instant cache hit
             if (_cache.TryGetValue(filePath, out PreparedView cached))
             {
                 ApplyPreparedView(cached);
@@ -142,7 +141,6 @@ namespace XisfExplorerPreview
                 return;
             }
 
-            // 2. Decode synchronously on miss with fast display
             PreparedView loaded = LoadAndRender(filePath);
             if (loaded != null)
             {
@@ -164,7 +162,7 @@ namespace XisfExplorerPreview
                 XisfRawFrame frame = (ext == ".xisf") ? XisfParser.LoadRawFrame(filePath) : FitsParser.LoadRawFrame(filePath);
                 if (frame == null) return null;
 
-                Bitmap bmp = XisfParser.RenderBitmapFromRaw(frame, frame.AutoShadows, frame.AutoMidtones, frame.AutoHighlights, 1);
+                Bitmap bmp = StfEngine.RenderBitmapFromRaw(frame, frame.AutoShadows, frame.AutoMidtones, frame.AutoHighlights, 1);
                 return new PreparedView { Frame = frame, RenderedBitmap = bmp };
             }
             catch
@@ -190,7 +188,6 @@ namespace XisfExplorerPreview
             Invalidate();
         }
 
-        // Asynchronously pre-decodes the next and previous image into RAM
         private void SchedulePreload()
         {
             _preloadCts?.Cancel();
@@ -223,7 +220,6 @@ namespace XisfExplorerPreview
                     if (pv != null && !token.IsCancellationRequested) _cache[prevPath] = pv;
                 }
 
-                // Keep cache constrained to 5 images max to manage memory usage
                 if (_cache.Count > 5)
                 {
                     foreach (var key in _cache.Keys.ToList())
@@ -252,7 +248,7 @@ namespace XisfExplorerPreview
             _histPanel.Invalidate();
 
             var oldBmp = _displayBitmap;
-            _displayBitmap = XisfParser.RenderBitmapFromRaw(_currentFrame, _currentFrame.AutoShadows, _currentFrame.AutoMidtones, _currentFrame.AutoHighlights, 1);
+            _displayBitmap = StfEngine.RenderBitmapFromRaw(_currentFrame, _currentFrame.AutoShadows, _currentFrame.AutoMidtones, _currentFrame.AutoHighlights, 1);
             oldBmp?.Dispose();
 
             UpdateTitle();
@@ -267,7 +263,7 @@ namespace XisfExplorerPreview
             _histPanel.Invalidate();
 
             var oldBmp = _displayBitmap;
-            _displayBitmap = XisfParser.RenderBitmapFromRaw(_currentFrame, 0.0f, 0.5f, 1.0f, 1);
+            _displayBitmap = StfEngine.RenderBitmapFromRaw(_currentFrame, 0.0f, 0.5f, 1.0f, 1);
             oldBmp?.Dispose();
 
             UpdateTitle();
@@ -280,7 +276,7 @@ namespace XisfExplorerPreview
 
             int step = (_currentFrame.Width > 2000 || _currentFrame.Height > 2000) ? 4 : 2;
             var oldBmp = _displayBitmap;
-            _displayBitmap = XisfParser.RenderBitmapFromRaw(_currentFrame, _histPanel.Shadows, _histPanel.Midtones, _histPanel.Highlights, step);
+            _displayBitmap = StfEngine.RenderBitmapFromRaw(_currentFrame, _histPanel.Shadows, _histPanel.Midtones, _histPanel.Highlights, step);
             oldBmp?.Dispose();
 
             Invalidate();
@@ -291,7 +287,7 @@ namespace XisfExplorerPreview
             if (_currentFrame == null) return;
 
             var oldBmp = _displayBitmap;
-            _displayBitmap = XisfParser.RenderBitmapFromRaw(_currentFrame, _histPanel.Shadows, _histPanel.Midtones, _histPanel.Highlights, 1);
+            _displayBitmap = StfEngine.RenderBitmapFromRaw(_currentFrame, _histPanel.Shadows, _histPanel.Midtones, _histPanel.Highlights, 1);
             oldBmp?.Dispose();
 
             UpdateTitle();

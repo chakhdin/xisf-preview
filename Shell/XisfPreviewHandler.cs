@@ -48,30 +48,7 @@ namespace XisfExplorerPreview
 
         private void RenderPreviewFromStream(Stream stream)
         {
-            byte[] sig = new byte[8];
-            stream.Seek(0, SeekOrigin.Begin);
-            int bytesRead = stream.Read(sig, 0, 8);
-            stream.Seek(0, SeekOrigin.Begin);
-
-            if (bytesRead < 8)
-            {
-                _control.ShowMessage("Invalid file format.");
-                return;
-            }
-
-            Bitmap bmp = null;
-            if (sig[0] == 88 && sig[1] == 73 && sig[2] == 83 && sig[3] == 70) // 'XISF'
-            {
-                bmp = XisfParser.GetPreviewImage(stream, 2048);
-            }
-            else if (sig[0] == 'S' && sig[1] == 'I' && sig[2] == 'M' && sig[3] == 'P') // 'SIMPLE'
-            {
-                XisfRawFrame frame = FitsParser.LoadRawFrame(stream, 2048);
-                if (frame != null)
-                {
-                    bmp = XisfParser.RenderBitmapFromRaw(frame, frame.AutoShadows, frame.AutoMidtones, frame.AutoHighlights, 1);
-                }
-            }
+            Bitmap bmp = AstroFormatDetector.RenderImageFromStream(stream, 2048);
 
             if (bmp != null)
             {
