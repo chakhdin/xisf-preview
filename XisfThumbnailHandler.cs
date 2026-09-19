@@ -9,52 +9,39 @@ namespace XisfExplorerPreview
 {
     [ComVisible(true)]
     [COMServerAssociation(AssociationType.ClassOfExtension, ".xisf")]
-    [DisplayName("XISF Thumbnail Handler")]
-    [Guid("A71BC054-942C-4A5F-A4F7-D8B6F3E6C1D2")]
+    [COMServerAssociation(AssociationType.ClassOfExtension, ".fits")]
+    [COMServerAssociation(AssociationType.ClassOfExtension, ".fit")]
+    [COMServerAssociation(AssociationType.ClassOfExtension, ".fts")]
     public class XisfThumbnailHandler : SharpThumbnailHandler
     {
         protected override Bitmap GetThumbnailImage(uint width)
         {
             try
             {
-                if (SelectedItemStream == null)
+                if (SelectedItemStream == null || !SelectedItemStream.CanSeek)
                     return null;
 
-                // Pass requested size down so parser downsamples on I/O read
-                using (Bitmap bmp = XisfParser.GetPreviewImage(SelectedItemStream, (int)width))
-                {
-                    if (bmp == null)
-                        return null;
+                byte[] sig = new byte[8];
+                SelectedItemStream.Seek(0, SeekOrigin.Begin);
+                SelectedItemStream.Read(sig, 0, 8);
+                SelectedItemStream.Seek(0, SeekOrigin.Begin);
 
-                    return ScaleThumbnail(bmp, (int)width);
+                if (sig[0] == 88 && sig[1] == 73 && sig[2] == 83 && sig[3] == 70) // 'XISF'
+                {
+                    return XisfParser.GetPreviewImage(SelectedItemStream, (int)width);
                 }
+                else if (sig[0] == 'S' && sig[1] == 'I' && sig[2] == 'M' && sig[3] == 'P') // 'SIMPLE'
+                {
+                    XisfRawFrame frame = FitsParser.LoadRawFrame(SelectedItemStream, (int)width);
+                    return frame != null ? XisfParser.RenderBitmapFromRaw(frame, frame.AutoShadows, frame.AutoMidtones, frame.AutoHighlights, 1) : null;
+                }
+
+                return null;
             }
             catch
             {
                 return null;
             }
-        }
-
-        private Bitmap ScaleThumbnail(Bitmap source, int maxDimension)
-        {
-            if (source.Width <= maxDimension && source.Height <= maxDimension)
-            {
-                return new Bitmap(source);
-            }
-
-            float scale = Math.Min((float)maxDimension / source.Width, (float)maxDimension / source.Height);
-            int newWidth = Math.Max(1, (int)(source.Width * scale));
-            int newHeight = Math.Max(1, (int)(source.Height * scale));
-
-            Bitmap dest = new Bitmap(newWidth, newHeight, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
-            using (Graphics g = Graphics.FromImage(dest))
-            {
-                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.Bilinear;
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
-                g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
-                g.DrawImage(source, 0, 0, newWidth, newHeight);
-            }
-            return dest;
         }
     }
 }

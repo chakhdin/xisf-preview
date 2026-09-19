@@ -1,12 +1,22 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace XisfExplorerPreview
 {
+    public class PreparedView
+    {
+        public XisfRawFrame Frame { get; set; }
+        public Bitmap RenderedBitmap { get; set; }
+    }
+
     public class FastViewerForm : Form
     {
         private string _currentFilePath;
@@ -26,12 +36,16 @@ namespace XisfExplorerPreview
         private HistogramControl _histPanel;
         private BottomToolbarControl _bottomToolbar;
 
+        // High-Speed Frame Cache for Next/Previous preloading
+        private readonly ConcurrentDictionary<string, PreparedView> _cache = new ConcurrentDictionary<string, PreparedView>(StringComparer.OrdinalIgnoreCase);
+        private CancellationTokenSource _preloadCts;
+
         public FastViewerForm(string initialFilePath)
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
             BackColor = Color.FromArgb(16, 16, 18);
             WindowState = FormWindowState.Maximized;
-            Text = "XISF FastViewer";
+            Text = "FastViewer";
             KeyPreview = true;
 
             InitializeOverlays();
@@ -76,7 +90,6 @@ namespace XisfExplorerPreview
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
-            // Ensure full fit calculation occurs after window layout is completely realized
             FitToScreen();
         }
 
@@ -84,6 +97,7 @@ namespace XisfExplorerPreview
         {
             base.OnResize(e);
             PositionBottomToolbar();
+            FitToScreen();
         }
 
         private void PositionBottomToolbar()
@@ -99,7 +113,13 @@ namespace XisfExplorerPreview
             try
             {
                 string dir = Path.GetDirectoryName(filePath);
-                _folderFiles = new List<string>(Directory.GetFiles(dir, "*.xisf"));
+                var files = Directory.GetFiles(dir, "*.*")
+                    .Where(f => f.EndsWith(".xisf", StringComparison.OrdinalIgnoreCase) ||
+                                f.EndsWith(".fits", StringComparison.OrdinalIgnoreCase) ||
+                                f.EndsWith(".fit", StringComparison.OrdinalIgnoreCase) ||
+                                f.EndsWith(".fts", StringComparison.OrdinalIgnoreCase));
+
+                _folderFiles = new List<string>(files);
                 _folderFiles.Sort(StringComparer.OrdinalIgnoreCase);
                 _currentIndex = _folderFiles.IndexOf(filePath);
             }
@@ -111,25 +131,115 @@ namespace XisfExplorerPreview
 
         private void OpenFile(string filePath)
         {
+            _currentFilePath = filePath;
+            _currentIndex = _folderFiles.IndexOf(filePath);
+
+            // 1. Instant cache hit
+            if (_cache.TryGetValue(filePath, out PreparedView cached))
+            {
+                ApplyPreparedView(cached);
+                SchedulePreload();
+                return;
+            }
+
+            // 2. Decode synchronously on miss with fast display
+            PreparedView loaded = LoadAndRender(filePath);
+            if (loaded != null)
+            {
+                _cache[filePath] = loaded;
+                ApplyPreparedView(loaded);
+                SchedulePreload();
+            }
+            else
+            {
+                Text = $"Failed to load: {Path.GetFileName(filePath)}";
+            }
+        }
+
+        private static PreparedView LoadAndRender(string filePath)
+        {
             try
             {
-                _currentFilePath = filePath;
-                _currentFrame = XisfParser.LoadRawFrame(filePath);
+                string ext = Path.GetExtension(filePath).ToLowerInvariant();
+                XisfRawFrame frame = (ext == ".xisf") ? XisfParser.LoadRawFrame(filePath) : FitsParser.LoadRawFrame(filePath);
+                if (frame == null) return null;
 
-                if (_currentFrame == null)
+                Bitmap bmp = XisfParser.RenderBitmapFromRaw(frame, frame.AutoShadows, frame.AutoMidtones, frame.AutoHighlights, 1);
+                return new PreparedView { Frame = frame, RenderedBitmap = bmp };
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private void ApplyPreparedView(PreparedView view)
+        {
+            _currentFrame = view.Frame;
+            var old = _displayBitmap;
+            _displayBitmap = view.RenderedBitmap;
+
+            _histPanel.SetHistogram(_currentFrame.Histogram, _currentFrame.Median, _currentFrame.MAD);
+            _histPanel.Shadows = _currentFrame.AutoShadows;
+            _histPanel.Midtones = _currentFrame.AutoMidtones;
+            _histPanel.Highlights = _currentFrame.AutoHighlights;
+            _histPanel.Invalidate();
+
+            FitToScreen();
+            UpdateTitle();
+            Invalidate();
+        }
+
+        // Asynchronously pre-decodes the next and previous image into RAM
+        private void SchedulePreload()
+        {
+            _preloadCts?.Cancel();
+            _preloadCts = new CancellationTokenSource();
+            CancellationToken token = _preloadCts.Token;
+
+            if (_folderFiles.Count <= 1) return;
+
+            int nextIdx = (_currentIndex + 1) % _folderFiles.Count;
+            int prevIdx = (_currentIndex - 1 + _folderFiles.Count) % _folderFiles.Count;
+
+            string nextPath = _folderFiles[nextIdx];
+            string prevPath = _folderFiles[prevIdx];
+
+            Task.Run(() =>
+            {
+                if (token.IsCancellationRequested) return;
+
+                if (!_cache.ContainsKey(nextPath))
                 {
-                    Text = $"Failed to load: {Path.GetFileName(filePath)}";
-                    return;
+                    PreparedView pv = LoadAndRender(nextPath);
+                    if (pv != null && !token.IsCancellationRequested) _cache[nextPath] = pv;
                 }
 
-                _histPanel.SetHistogram(_currentFrame.Histogram, _currentFrame.Median, _currentFrame.MAD);
-                TriggerLinkedAutoStf();
-                FitToScreen();
-            }
-            catch (Exception ex)
-            {
-                Text = $"Error: {ex.Message}";
-            }
+                if (token.IsCancellationRequested) return;
+
+                if (!_cache.ContainsKey(prevPath))
+                {
+                    PreparedView pv = LoadAndRender(prevPath);
+                    if (pv != null && !token.IsCancellationRequested) _cache[prevPath] = pv;
+                }
+
+                // Keep cache constrained to 5 images max to manage memory usage
+                if (_cache.Count > 5)
+                {
+                    foreach (var key in _cache.Keys.ToList())
+                    {
+                        if (!key.Equals(_currentFilePath, StringComparison.OrdinalIgnoreCase) &&
+                            !key.Equals(nextPath, StringComparison.OrdinalIgnoreCase) &&
+                            !key.Equals(prevPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (_cache.TryRemove(key, out PreparedView removed))
+                            {
+                                removed.RenderedBitmap?.Dispose();
+                            }
+                        }
+                    }
+                }
+            }, token);
         }
 
         private void TriggerLinkedAutoStf()
@@ -169,7 +279,6 @@ namespace XisfExplorerPreview
             if (_currentFrame == null) return;
 
             int step = (_currentFrame.Width > 2000 || _currentFrame.Height > 2000) ? 4 : 2;
-
             var oldBmp = _displayBitmap;
             _displayBitmap = XisfParser.RenderBitmapFromRaw(_currentFrame, _histPanel.Shadows, _histPanel.Midtones, _histPanel.Highlights, step);
             oldBmp?.Dispose();
@@ -193,7 +302,6 @@ namespace XisfExplorerPreview
         {
             if (_currentFrame == null || ClientSize.Width <= 0 || ClientSize.Height <= 0) return;
 
-            // Compute uniform scale to fit image completely within window with toolbar clearance
             float availableHeight = Math.Max(10f, ClientSize.Height - 70f);
             float zx = (float)ClientSize.Width / _currentFrame.Width;
             float zy = availableHeight / _currentFrame.Height;
@@ -241,7 +349,7 @@ namespace XisfExplorerPreview
         {
             if (_currentFrame == null) return;
             string fileName = Path.GetFileName(_currentFilePath);
-            Text = $"{fileName} ({_currentFrame.Width}x{_currentFrame.Height}, {_currentFrame.Channels} Ch) - {(_zoom * 100):F0}% | [{_currentIndex + 1}/{_folderFiles.Count}] - XISF FastViewer";
+            Text = $"{fileName} ({_currentFrame.Width}x{_currentFrame.Height}, {_currentFrame.Channels} Ch) - {(_zoom * 100):F0}% | [{_currentIndex + 1}/{_folderFiles.Count}] - FastViewer";
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -263,7 +371,7 @@ namespace XisfExplorerPreview
             }
             else
             {
-                TextRenderer.DrawText(g, "No XISF image loaded. Use PageUp/Down or toolbar to navigate.", Font, ClientRectangle, Color.Gray, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                TextRenderer.DrawText(g, "No image loaded. Use PageUp/Down or toolbar to navigate.", Font, ClientRectangle, Color.Gray, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
         }
 
