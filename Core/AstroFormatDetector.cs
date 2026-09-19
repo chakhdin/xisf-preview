@@ -58,7 +58,7 @@ namespace XisfExplorerPreview
             else if (format == AstroFileFormat.Fits)
             {
                 XisfRawFrame frame = FitsParser.LoadRawFrame(stream, targetDimension);
-                return frame != null ? StfEngine.RenderBitmapFromRaw(frame, frame.AutoShadows, frame.AutoMidtones, frame.AutoHighlights, 1) : null;
+                return frame != null ? StfEngine.RenderAutoStretch(frame, 1) : null;
             }
 
             return null;

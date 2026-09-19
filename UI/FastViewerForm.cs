@@ -162,7 +162,7 @@ namespace XisfExplorerPreview
                 XisfRawFrame frame = (ext == ".xisf") ? XisfParser.LoadRawFrame(filePath) : FitsParser.LoadRawFrame(filePath);
                 if (frame == null) return null;
 
-                Bitmap bmp = StfEngine.RenderBitmapFromRaw(frame, frame.AutoShadows, frame.AutoMidtones, frame.AutoHighlights, 1);
+                Bitmap bmp = StfEngine.RenderAutoStretch(frame, 1);
                 return new PreparedView { Frame = frame, RenderedBitmap = bmp };
             }
             catch
@@ -248,7 +248,7 @@ namespace XisfExplorerPreview
             _histPanel.Invalidate();
 
             var oldBmp = _displayBitmap;
-            _displayBitmap = StfEngine.RenderBitmapFromRaw(_currentFrame, _currentFrame.AutoShadows, _currentFrame.AutoMidtones, _currentFrame.AutoHighlights, 1);
+            _displayBitmap = StfEngine.RenderAutoStretch(_currentFrame, 1);
             oldBmp?.Dispose();
 
             UpdateTitle();

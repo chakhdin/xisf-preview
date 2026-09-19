@@ -7,6 +7,92 @@ namespace XisfExplorerPreview
 {
     public static class StfEngine
     {
+        // Always computes the linked (pooled-channel) STF, since it's used as the fallback
+        // for mono frames and for FastViewerForm's manual/"reset to auto" editing. RGB frames
+        // additionally get an unlinked per-channel STF, used only for the automatic initial
+        // render (thumbnail/preview/first FastViewer load) — see RenderAutoStretch.
+        public static void ComputeAutoStf(XisfRawFrame frame, bool isThumbnail)
+        {
+            ComputeLinkedAutoStf(frame, isThumbnail);
+
+            int activeChannels = Math.Min(frame.Channels, 3);
+            if (!isThumbnail && activeChannels >= 3)
+            {
+                ComputeUnlinkedAutoStf(frame, activeChannels);
+            }
+        }
+
+        // Independent per-channel median/MAD/MTF-solve — same math as the linked version,
+        // just scoped to one channel's own samples instead of pooling across channels.
+        private static void ComputeUnlinkedAutoStf(XisfRawFrame frame, int activeChannels)
+        {
+            int totalPixels = frame.Width * frame.Height;
+            const int maxSamples = 65536;
+            int step = Math.Max(1, totalPixels / maxSamples);
+            int count = (totalPixels + step - 1) / step;
+
+            float[] shadows = new float[activeChannels];
+            float[] midtones = new float[activeChannels];
+            float[] highlights = new float[activeChannels];
+
+            float[] samples = new float[count];
+
+            for (int c = 0; c < activeChannels; c++)
+            {
+                int idx = 0;
+                for (int i = 0; i < totalPixels && idx < samples.Length; i += step)
+                {
+                    samples[idx++] = frame.NormalizedData[(i * frame.Channels) + c];
+                }
+
+                Array.Sort(samples, 0, idx);
+                float median = idx > 0 ? samples[idx / 2] : 0.0f;
+
+                if (median > 0.5f) // Non-linear or bright
+                {
+                    shadows[c] = 0.0f;
+                    midtones[c] = 0.5f;
+                    highlights[c] = 1.0f;
+                    continue;
+                }
+
+                float[] absDev = new float[idx];
+                for (int i = 0; i < idx; i++)
+                    absDev[i] = Math.Abs(samples[i] - median);
+                Array.Sort(absDev);
+                float mad = idx > 0 ? absDev[idx / 2] : 0.0f;
+
+                float nmad = 1.4826f * mad;
+                const float B = 0.25f;
+                const float C = -2.8f;
+
+                float c0 = 0.0f;
+                if (nmad > 0.000001f)
+                {
+                    c0 = median + (C * nmad);
+                    if (c0 < 0.0f) c0 = 0.0f;
+                }
+
+                float x = median - c0;
+                float m = 0.5f;
+                if (x > 0.000001f && x < 0.999999f)
+                {
+                    float num = x * (1.0f - B);
+                    float den = (x * (1.0f - 2.0f * B)) + B;
+                    if (Math.Abs(den) > 1e-7f) m = num / den;
+                    m = Math.Max(0.0001f, Math.Min(0.9999f, m));
+                }
+
+                shadows[c] = c0;
+                midtones[c] = m;
+                highlights[c] = 1.0f;
+            }
+
+            frame.AutoShadowsPerChannel = shadows;
+            frame.AutoMidtonesPerChannel = midtones;
+            frame.AutoHighlightsPerChannel = highlights;
+        }
+
         public static void ComputeLinkedAutoStf(XisfRawFrame frame, bool isThumbnail)
         {
             if (isThumbnail)
@@ -100,6 +186,73 @@ namespace XisfExplorerPreview
 
             float val = ((m - 1.0f) * x) / den;
             return Math.Max(0.0f, Math.Min(1.0f, val));
+        }
+
+        // Automatic-stretch entry point: uses the unlinked per-channel STF for RGB frames
+        // when available, otherwise falls back to the linked (or mono) triple. Manual
+        // editing (histogram dragging, reset) always goes through RenderBitmapFromRaw
+        // directly with an explicit linked triple, unaffected by this.
+        public static unsafe Bitmap RenderAutoStretch(XisfRawFrame frame, int renderStep = 1)
+        {
+            int activeChannels = Math.Min(frame.Channels, 3);
+            if (activeChannels >= 3 &&
+                frame.AutoShadowsPerChannel != null && frame.AutoShadowsPerChannel.Length >= activeChannels &&
+                frame.AutoMidtonesPerChannel != null && frame.AutoHighlightsPerChannel != null)
+            {
+                return RenderBitmapFromRawUnlinked(frame, frame.AutoShadowsPerChannel, frame.AutoMidtonesPerChannel, frame.AutoHighlightsPerChannel, renderStep);
+            }
+
+            return RenderBitmapFromRaw(frame, frame.AutoShadows, frame.AutoMidtones, frame.AutoHighlights, renderStep);
+        }
+
+        private static unsafe Bitmap RenderBitmapFromRawUnlinked(XisfRawFrame frame, float[] shadows, float[] midtones, float[] highlights, int renderStep)
+        {
+            byte[] lutR = BuildStfLut(shadows[0], midtones[0], highlights[0]);
+            byte[] lutG = BuildStfLut(shadows[1], midtones[1], highlights[1]);
+            byte[] lutB = BuildStfLut(shadows[2], midtones[2], highlights[2]);
+
+            int outWidth = frame.Width / renderStep;
+            int outHeight = frame.Height / renderStep;
+
+            Bitmap bmp = new Bitmap(outWidth, outHeight, PixelFormat.Format24bppRgb);
+            BitmapData bmpData = bmp.LockBits(new Rectangle(0, 0, outWidth, outHeight), ImageLockMode.WriteOnly, bmp.PixelFormat);
+
+            IntPtr scan0Ptr = bmpData.Scan0;
+            int stride = bmpData.Stride;
+            int channels = frame.Channels;
+            int srcWidth = frame.Width;
+            float[] normData = frame.NormalizedData;
+
+            fixed (float* pNorm = normData)
+            {
+                IntPtr pNormPtr = (IntPtr)pNorm;
+
+                Parallel.For(0, outHeight, y =>
+                {
+                    float* localNorm = (float*)pNormPtr.ToPointer();
+                    byte* row = (byte*)scan0Ptr.ToPointer() + (y * stride);
+                    int srcY = y * renderStep;
+                    int srcRowOffset = srcY * srcWidth;
+
+                    for (int x = 0; x < outWidth; x++)
+                    {
+                        int srcX = x * renderStep;
+                        int srcIdx = (srcRowOffset + srcX) * channels;
+
+                        byte r = SampleLut(localNorm[srcIdx], lutR);
+                        byte g = SampleLut(localNorm[srcIdx + 1], lutG);
+                        byte b = SampleLut(localNorm[srcIdx + 2], lutB);
+
+                        int bIdx = x * 3;
+                        row[bIdx] = b;
+                        row[bIdx + 1] = g;
+                        row[bIdx + 2] = r;
+                    }
+                });
+            }
+
+            bmp.UnlockBits(bmpData);
+            return bmp;
         }
 
         public static unsafe Bitmap RenderBitmapFromRaw(XisfRawFrame frame, float shadows, float midtones, float highlights, int renderStep = 1)
