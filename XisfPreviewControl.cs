@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using SharpShell.SharpPreviewHandler;
 
@@ -7,85 +8,69 @@ namespace XisfExplorerPreview
 {
     public class XisfPreviewControl : PreviewHandlerControl
     {
-        private PictureBox _pictureBox;
-        private Label _lblError;
+        private Bitmap _previewBitmap;
+        private string _statusMessage;
 
         public XisfPreviewControl()
         {
-            InitializeComponent();
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            BackColor = Color.FromArgb(16, 16, 18);
         }
 
-        private void InitializeComponent()
+        public void SetImage(Bitmap bmp)
         {
-            _pictureBox = new PictureBox
-            {
-                Dock = DockStyle.Fill,
-                SizeMode = PictureBoxSizeMode.Zoom,
-                BackColor = Color.Black
-            };
-
-            _lblError = new Label
-            {
-                Dock = DockStyle.Fill,
-                ForeColor = Color.White,
-                BackColor = Color.Black,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Visible = false
-            };
-
-            Controls.Add(_pictureBox);
-            Controls.Add(_lblError);
+            var old = _previewBitmap;
+            _previewBitmap = bmp;
+            _statusMessage = null;
+            old?.Dispose();
+            Invalidate();
         }
 
-        public void LoadFile(string filePath)
+        public void ShowMessage(string message)
         {
-            try
+            var old = _previewBitmap;
+            _previewBitmap = null;
+            _statusMessage = message;
+            old?.Dispose();
+            Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            Graphics g = e.Graphics;
+
+            if (_previewBitmap != null)
             {
-                if (string.IsNullOrEmpty(filePath))
-                    return;
+                float zx = (float)Width / _previewBitmap.Width;
+                float zy = (float)Height / _previewBitmap.Height;
+                float zoom = Math.Min(zx, zy);
 
-                Bitmap previewImage = XisfParser.GetPreviewImage(filePath);
+                float dw = _previewBitmap.Width * zoom;
+                float dh = _previewBitmap.Height * zoom;
+                float dx = (Width - dw) / 2f;
+                float dy = (Height - dh) / 2f;
 
-                if (previewImage != null)
+                g.InterpolationMode = zoom < 1.0f ? InterpolationMode.Bilinear : InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = PixelOffsetMode.Half;
+                g.DrawImage(_previewBitmap, dx, dy, dw, dh);
+            }
+            else if (!string.IsNullOrEmpty(_statusMessage))
+            {
+                using (Font f = new Font("Segoe UI", 10f))
                 {
-                    if (_pictureBox.Image != null)
-                    {
-                        var oldImage = _pictureBox.Image;
-                        _pictureBox.Image = null;
-                        oldImage.Dispose();
-                    }
-
-                    _pictureBox.Image = previewImage;
-                    _pictureBox.Visible = true;
-                    _lblError.Visible = false;
-                }
-                else
-                {
-                    ShowError("Unable to render XISF image or thumbnail.");
+                    TextRenderer.DrawText(g, _statusMessage, f, ClientRectangle, Color.LightGray,
+                        TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
                 }
             }
-            catch (Exception ex)
-            {
-                ShowError($"Error loading XISF:\n{ex.Message}");
-            }
-        }
-
-        private void ShowError(string message)
-        {
-            _pictureBox.Visible = false;
-            _lblError.Text = message;
-            _lblError.Visible = true;
         }
 
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
-                if (_pictureBox?.Image != null)
-                {
-                    _pictureBox.Image.Dispose();
-                    _pictureBox.Image = null;
-                }
+                _previewBitmap?.Dispose();
+                _previewBitmap = null;
             }
             base.Dispose(disposing);
         }
