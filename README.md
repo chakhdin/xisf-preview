@@ -20,7 +20,7 @@ A high-performance Windows Shell extension and lightweight viewer for astronomic
   - Auto-fits window dimensions on launch.
   - Multi-threaded background pre-fetching for instant **Next** (`>`) / **Previous** (`<`) folder browsing.
   - Interactive HUD stretch controls with live histogram.
-  - Non-intrusive default setup: registers Explorer preview and thumbnail providers without hijacking your existing default file associations.
+  - Non-intrusive setup: registers only the Explorer preview and thumbnail providers — never touches your existing default file associations.
 
 ---
 
@@ -39,7 +39,7 @@ A high-performance Windows Shell extension and lightweight viewer for astronomic
 2. Run `XisfFastViewerSetup.exe` with administrative privileges.
 3. Restart Windows Explorer or sign out and back in if thumbnails do not immediately refresh.
 
-> **Note**: By default, the installer only registers the Shell Preview and Thumbnail handlers and adds FastViewer to the Windows "Open with..." menu. Your existing file associations (e.g., PixInsight, ASIFitsView) remain unchanged unless you explicitly check the optional association task during setup.
+> **Note**: The installer only registers the Explorer Preview and Thumbnail handlers. It does not add FastViewer to the "Open with..." menu and does not touch which program opens `.xisf`/`.fits`/`.fit`/`.fts` files by default — your existing file associations (e.g., PixInsight, ASIFitsView) are left completely untouched.
 
 ---
 

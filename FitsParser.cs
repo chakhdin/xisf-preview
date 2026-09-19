@@ -109,6 +109,17 @@ namespace XisfExplorerPreview
 
                 if (totalRead < totalDataBytes) return null; // truncated pixel data
 
+                // Classic FITS/IRAF convention stores row 1 at the bottom of the image, so a
+                // bottom-up-to-top-down flip is needed for on-screen display. Some writers
+                // (e.g. PixInsight) instead store row 1 at the top and say so explicitly via
+                // ROWORDER; honor that when present instead of always flipping.
+                bool flipVertically = true;
+                if (header.TryGetValue("ROWORDER", out string rowOrder) &&
+                    rowOrder.Equals("TOP-DOWN", StringComparison.OrdinalIgnoreCase))
+                {
+                    flipVertically = false;
+                }
+
                 int step = 1;
                 if (targetDimension > 0 && (width > targetDimension || height > targetDimension))
                 {
@@ -143,7 +154,7 @@ namespace XisfExplorerPreview
                             byte* pPlaneLocal = (byte*)pPlanePtr.ToPointer();
                             float* pNormLocal = (float*)pNormPtr.ToPointer();
 
-                            int srcY = (height - 1) - (y * step);
+                            int srcY = flipVertically ? (height - 1) - (y * step) : y * step;
                             long srcRowOffset = (long)srcY * width * bytesPerPixel;
                             int dstRowOffset = y * outWidth;
 
