@@ -203,7 +203,7 @@ namespace XisfExplorerPreview
                     frame.Histogram[bin]++;
                 }
 
-                ComputeLinkedAutoStf(frame, false);
+                StfEngine.ComputeAutoStf(frame, false);
                 return frame;
             }
             catch
@@ -211,77 +211,6 @@ namespace XisfExplorerPreview
                 // Any malformed/truncated/corrupt file falls back to "no preview" rather than propagating.
                 return null;
             }
-        }
-
-        private static void ComputeLinkedAutoStf(XisfRawFrame frame, bool isThumbnail)
-        {
-            if (isThumbnail)
-            {
-                frame.AutoShadows = 0.0f;
-                frame.AutoMidtones = 0.5f;
-                frame.AutoHighlights = 1.0f;
-                return;
-            }
-
-            int totalPixels = frame.Width * frame.Height;
-            const int maxSamples = 32768;
-            int step = Math.Max(1, totalPixels / maxSamples);
-            int count = (totalPixels + step - 1) / step;
-            int activeChannels = frame.Channels;
-
-            float[] pooled = new float[count * activeChannels];
-            int idx = 0;
-
-            for (int i = 0; i < totalPixels && idx < pooled.Length; i += step)
-            {
-                for (int c = 0; c < activeChannels; c++)
-                {
-                    pooled[idx++] = frame.NormalizedData[(i * activeChannels) + c];
-                }
-            }
-
-            Array.Sort(pooled, 0, idx);
-            float median = pooled[idx / 2];
-            frame.Median = median;
-
-            if (median > 0.5f)
-            {
-                frame.AutoShadows = 0.0f;
-                frame.AutoMidtones = 0.5f;
-                frame.AutoHighlights = 1.0f;
-                return;
-            }
-
-            float[] absDev = new float[idx];
-            for (int i = 0; i < idx; i++) absDev[i] = Math.Abs(pooled[i] - median);
-            Array.Sort(absDev);
-            float mad = absDev[idx / 2];
-            frame.MAD = mad;
-
-            float nmad = 1.4826f * mad;
-            const float B = 0.25f;
-            const float C = -2.8f;
-
-            float c0 = 0.0f;
-            if (nmad > 0.000001f)
-            {
-                c0 = median + (C * nmad);
-                if (c0 < 0.0f) c0 = 0.0f;
-            }
-
-            float x = median - c0;
-            float m = 0.5f;
-            if (x > 0.000001f && x < 0.999999f)
-            {
-                float num = x * (1.0f - B);
-                float den = (x * (1.0f - 2.0f * B)) + B;
-                if (Math.Abs(den) > 1e-7f) m = num / den;
-                m = Math.Max(0.0001f, Math.Min(0.9999f, m));
-            }
-
-            frame.AutoShadows = c0;
-            frame.AutoMidtones = m;
-            frame.AutoHighlights = 1.0f;
         }
     }
 }
