@@ -11,13 +11,12 @@ Compression=lzma2/ultra64
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
-PrivilegesRequiredOverridesAllowed=dialog
 ChangesAssociations=yes
 SetupIconFile=app.ico
 UsedUserAreasWarning=no
 CloseApplications=yes
-CloseApplicationsFilter=dllhost.exe,prevhost.exe
-RestartApplications=no
+CloseApplicationsFilter=explorer.exe,dllhost.exe,prevhost.exe
+RestartApplications=yes
 
 [Files]
 Source: "bin\Release\net48\XisfFastViewer.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -92,13 +91,21 @@ Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\XisfFastView
 Filename: "{dotnet4064}\regasm.exe"; Parameters: "/unregister ""{app}\XisfFastViewer.exe"""; Flags: runhidden; RunOnceId: "UnregXisfCOMServer"
 
 [Code]
+var
+  ExplorerWasKilled: Boolean;
+
 procedure SHChangeNotify(wEventId: Cardinal; uFlags: UINT; dwItem1, dwItem2: DWORD);
   external 'SHChangeNotify@shell32.dll stdcall';
 
-// CloseApplications/Restart Manager doesn't reliably catch the short-lived dllhost.exe/
-// prevhost.exe COM surrogates Explorer spawns per thumbnail/preview request, which is why
-// "DeleteFile failed; code 5 (Access is denied)" on XisfFastViewer.exe can still happen even
-// with it enabled. Kill them outright instead, same as the project's own build already does.
+// Root cause confirmed by hand: Explorer holds a plain (non-FILE_SHARE_DELETE) read
+// handle on XisfFastViewer.exe merely from having its folder open in a view - long
+// enough to make DeleteFile fail with "Access is denied" even for a fully elevated
+// process, and short-lived enough that no diagnostic tool (Get-Process modules,
+// Restart Manager, Sysinternals handle64.exe run a beat later) ever caught it holding
+// the file. CloseApplications/RestartApplications is the supported way to handle this,
+// but proved unreliable on its own for the short-lived dllhost.exe/prevhost.exe COM
+// surrogates too, so kill everything outright as a fallback and restart Explorer
+// ourselves afterwards instead of trusting RestartApplications alone.
 procedure KillLockingProcesses();
 var
   ResultCode: Integer;
@@ -106,6 +113,34 @@ begin
   Exec('taskkill.exe', '/F /IM dllhost.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec('taskkill.exe', '/F /IM prevhost.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec('taskkill.exe', '/F /IM XisfFastViewer.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+// Only called right before the actual file copy/removal, not during the wizard -
+// killing Explorer for the whole time the user is clicking through wizard pages
+// would blank their desktop/taskbar for no reason.
+procedure KillExplorerAndLockingProcesses();
+var
+  ResultCode: Integer;
+begin
+  Exec('taskkill.exe', '/F /IM explorer.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  ExplorerWasKilled := True;
+  KillLockingProcesses();
+end;
+
+procedure RelaunchExplorerIfNeeded();
+var
+  ResultCode: Integer;
+begin
+  if ExplorerWasKilled then
+  begin
+    // Setup runs elevated, so a plain Exec('explorer.exe') spawns Explorer as an
+    // elevated child - which then doesn't register itself as the interactive desktop
+    // shell (this is why the desktop/taskbar stayed gone after the file-copy step).
+    // /trustlevel:0x20000 explicitly de-elevates the new process to Medium integrity,
+    // the same mechanism Task Manager uses for its "Run new task" (unprivileged) option.
+    Exec('runas.exe', '/trustlevel:0x20000 "' + ExpandConstant('{win}') + '\explorer.exe"', '', SW_SHOWNORMAL, ewNoWait, ResultCode);
+    ExplorerWasKilled := False;
+  end;
 end;
 
 function InitializeSetup(): Boolean;
@@ -120,18 +155,61 @@ begin
   Result := True;
 end;
 
+// Even after a process hosting the exe as an executable image is killed, Windows
+// can hold the underlying image section open for a short, unpredictable moment
+// before the file is actually deletable/overwritable (taskkill returning is not
+// proof the OS has released it). So don't just kill once and hope - keep killing
+// and retrying the delete until it actually succeeds, or give up after ~5s.
+procedure WaitForFileUnlocked(FileName: String);
+var
+  i: Integer;
+begin
+  if not FileExists(FileName) then
+    exit;
+  for i := 1 to 10 do
+  begin
+    if DeleteFile(FileName) then
+      exit;
+    KillLockingProcesses();
+    Sleep(500);
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  if CurStep = ssPostInstall then
+  if CurStep = ssInstall then
+  begin
+    KillExplorerAndLockingProcesses();
+    WaitForFileUnlocked(ExpandConstant('{app}\XisfFastViewer.exe'));
+  end
+  else if CurStep = ssPostInstall then
   begin
     SHChangeNotify($08000000, 0, 0, 0); // SHCNE_ASSOCCHANGED
+    RelaunchExplorerIfNeeded();
   end;
+end;
+
+// Safety net: if the user aborts mid-install (ssPostInstall never reached), make
+// sure Explorer still comes back instead of leaving the desktop/taskbar gone.
+procedure DeinitializeSetup();
+begin
+  RelaunchExplorerIfNeeded();
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-  if CurUninstallStep = usPostUninstall then
+  if CurUninstallStep = usUninstall then
+  begin
+    KillExplorerAndLockingProcesses();
+  end
+  else if CurUninstallStep = usPostUninstall then
   begin
     SHChangeNotify($08000000, 0, 0, 0);
+    RelaunchExplorerIfNeeded();
   end;
+end;
+
+procedure DeinitializeUninstall();
+begin
+  RelaunchExplorerIfNeeded();
 end;
