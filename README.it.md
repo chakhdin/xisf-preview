@@ -20,7 +20,7 @@ Estensione ad alte prestazioni per la Shell di Windows e visualizzatore rapido p
   - Adattamento automatico dell'immagine alla finestra all'avvio.
   - Pre-caricamento asincrono in background per la navigazione istantanea senza ritardi tra i file della cartella (**Successivo** / **Precedente**).
   - Pannello HUD interattivo con istogramma in tempo reale e regolazione manuale dello stretch STF.
-  - Configurazione predefinita non invasiva: registra i componenti di anteprima della Shell senza modificare le associazioni dei programmi predefiniti esistenti.
+  - Configurazione non invasiva: registra unicamente i componenti di anteprima e miniatura della Shell, senza mai modificare le associazioni dei programmi predefiniti esistenti.
 
 ---
 
@@ -39,7 +39,7 @@ Estensione ad alte prestazioni per la Shell di Windows e visualizzatore rapido p
 2. Avviare `XisfFastViewerSetup.exe` con privilegi di amministratore.
 3. Riavviare Esplora Risorse o effettuare una disconnessione se le miniature non si aggiornano immediatamente.
 
-> **Nota**: Per impostazione predefinita, l'installer registra unicamente i gestori di anteprima della Shell e aggiunge FastViewer al menu contestuale «Apri con...». Le associazioni file predefinite (PixInsight, ASIFitsView, ecc.) rimangono invariate a meno che non venga selezionata l'apposita casella durante la procedura di setup.
+> **Nota**: L'installer registra unicamente i gestori di Anteprima e Miniatura di Esplora File. Non aggiunge FastViewer al menu «Apri con...» e non modifica in alcun modo il programma predefinito per l'apertura dei file `.xisf`/`.fits`/`.fit`/`.fts`: le associazioni esistenti (PixInsight, ASIFitsView, ecc.) restano completamente invariate.
 
 ---
 
