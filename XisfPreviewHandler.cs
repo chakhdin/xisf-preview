@@ -7,7 +7,9 @@ using SharpShell.SharpPreviewHandler;
 
 namespace XisfExplorerPreview
 {
+    [Guid("D37B4D58-7F16-4BC9-9A07-4C0E51610E92")]
     [ComVisible(true)]
+    [PreviewHandler]
     [COMServerAssociation(AssociationType.ClassOfExtension, ".xisf")]
     [COMServerAssociation(AssociationType.ClassOfExtension, ".fits")]
     [COMServerAssociation(AssociationType.ClassOfExtension, ".fit")]
@@ -27,7 +29,6 @@ namespace XisfExplorerPreview
         {
             try
             {
-                // SharpPreviewHandler exposes SelectedFilePath
                 if (!string.IsNullOrEmpty(SelectedFilePath) && File.Exists(SelectedFilePath))
                 {
                     using (FileStream fs = new FileStream(SelectedFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
