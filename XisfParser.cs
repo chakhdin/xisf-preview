@@ -53,79 +53,122 @@ namespace XisfExplorerPreview
             }
         }
 
+        // Hard ceilings guarding against corrupt/hostile files: a malformed header should
+        // fail gracefully instead of triggering a huge allocation or an out-of-bounds
+        // unsafe read (which, unlike a normal exception, can crash the shell/COM host).
+        private const long MaxHeaderBytes = 64L * 1024 * 1024;
+        private const int MaxDimension = 65535;
+        private const long MaxTotalPixels = 300_000_000L;
+
         public static XisfRawFrame LoadRawFrame(Stream stream, int targetDimension = 0)
         {
-            BinaryReader reader = new BinaryReader(stream);
-
-            byte[] signature = reader.ReadBytes(8);
-            if (!signature.SequenceEqual(XisfSignature))
-                return null;
-
-            uint headerLength = reader.ReadUInt32();
-            uint reserved = reader.ReadUInt32();
-
-            byte[] xmlBytes = reader.ReadBytes((int)headerLength);
-            string xmlContent = Encoding.UTF8.GetString(xmlBytes);
-
-            XDocument xdoc = XDocument.Parse(xmlContent);
-            XNamespace ns = "http://www.pixinsight.com/xisf";
-
-            XElement imgElem = xdoc.Root.Descendants(ns + "Image").FirstOrDefault();
-            bool isThumbnail = false;
-
-            if (targetDimension > 0 && targetDimension <= 512)
+            try
             {
-                XElement thumbElem = xdoc.Root.Descendants(ns + "Thumbnail").FirstOrDefault();
-                if (thumbElem != null)
+                BinaryReader reader = new BinaryReader(stream);
+
+                byte[] signature = reader.ReadBytes(8);
+                if (!signature.SequenceEqual(XisfSignature))
+                    return null;
+
+                uint headerLength = reader.ReadUInt32();
+                reader.ReadUInt32(); // reserved
+
+                if (headerLength == 0 || headerLength > MaxHeaderBytes)
+                    return null;
+
+                byte[] xmlBytes = reader.ReadBytes((int)headerLength);
+                if (xmlBytes.Length != headerLength)
+                    return null;
+
+                string xmlContent = Encoding.UTF8.GetString(xmlBytes);
+
+                XDocument xdoc = XDocument.Parse(xmlContent);
+                XNamespace ns = "http://www.pixinsight.com/xisf";
+
+                XElement imgElem = xdoc.Root?.Descendants(ns + "Image").FirstOrDefault();
+                bool isThumbnail = false;
+
+                if (targetDimension > 0 && targetDimension <= 512)
                 {
-                    imgElem = thumbElem;
-                    isThumbnail = true;
+                    XElement thumbElem = xdoc.Root.Descendants(ns + "Thumbnail").FirstOrDefault();
+                    if (thumbElem != null)
+                    {
+                        imgElem = thumbElem;
+                        isThumbnail = true;
+                    }
                 }
-            }
 
-            if (imgElem == null) return null;
+                if (imgElem == null) return null;
 
-            string geometry = imgElem.Attribute("geometry")?.Value;
-            string sampleFormat = imgElem.Attribute("sampleFormat")?.Value;
-            string location = imgElem.Attribute("location")?.Value;
-            string pixelStorage = imgElem.Attribute("pixelStorage")?.Value ?? "Planar";
-            string compression = imgElem.Attribute("compression")?.Value;
+                string geometry = imgElem.Attribute("geometry")?.Value;
+                string sampleFormat = imgElem.Attribute("sampleFormat")?.Value;
+                string location = imgElem.Attribute("location")?.Value;
+                string pixelStorage = imgElem.Attribute("pixelStorage")?.Value ?? "Planar";
+                string compression = imgElem.Attribute("compression")?.Value;
 
-            if (string.IsNullOrEmpty(geometry) || string.IsNullOrEmpty(location) || !string.IsNullOrEmpty(compression))
-                return null;
+                if (string.IsNullOrEmpty(geometry) || string.IsNullOrEmpty(location) || !string.IsNullOrEmpty(compression))
+                    return null;
 
-            string[] geoParts = geometry.Split(':');
-            int srcWidth = int.Parse(geoParts[0]);
-            int srcHeight = int.Parse(geoParts[1]);
-            int channels = int.Parse(geoParts[2]);
+                int bytesPerSample;
+                if (sampleFormat == "UInt8") bytesPerSample = 1;
+                else if (sampleFormat == "UInt16") bytesPerSample = 2;
+                else if (sampleFormat == "Float32") bytesPerSample = 4;
+                else return null; // unsupported/unknown sample format
 
-            byte[] pixelData = null;
+                string[] geoParts = geometry.Split(':');
+                if (geoParts.Length < 3) return null;
 
-            if (location.StartsWith("attachment:"))
-            {
-                string[] locParts = location.Split(':');
-                long position = long.Parse(locParts[1]);
-                int size = int.Parse(locParts[2]);
+                if (!int.TryParse(geoParts[0], out int srcWidth) ||
+                    !int.TryParse(geoParts[1], out int srcHeight) ||
+                    !int.TryParse(geoParts[2], out int channels))
+                    return null;
 
-                reader.BaseStream.Seek(position, SeekOrigin.Begin);
-                pixelData = reader.ReadBytes(size);
-            }
-            else if (location.StartsWith("inline:base64"))
-            {
-                pixelData = Convert.FromBase64String(imgElem.Value.Trim());
-            }
-            else if (location == "embedded")
-            {
-                XElement dataElem = imgElem.Element(ns + "Data") ?? imgElem.Element("Data");
-                if (dataElem != null && dataElem.Attribute("encoding")?.Value == "base64")
+                if (srcWidth <= 0 || srcHeight <= 0 || channels <= 0 ||
+                    srcWidth > MaxDimension || srcHeight > MaxDimension || channels > 4)
+                    return null;
+
+                if ((long)srcWidth * srcHeight > MaxTotalPixels)
+                    return null;
+
+                byte[] pixelData = null;
+
+                if (location.StartsWith("attachment:"))
                 {
-                    pixelData = Convert.FromBase64String(dataElem.Value.Trim());
+                    string[] locParts = location.Split(':');
+                    if (locParts.Length < 3) return null;
+                    if (!long.TryParse(locParts[1], out long position) ||
+                        !int.TryParse(locParts[2], out int size) ||
+                        position < 0 || size < 0)
+                        return null;
+
+                    reader.BaseStream.Seek(position, SeekOrigin.Begin);
+                    pixelData = reader.ReadBytes(size);
                 }
+                else if (location.StartsWith("inline:base64"))
+                {
+                    pixelData = Convert.FromBase64String(imgElem.Value.Trim());
+                }
+                else if (location == "embedded")
+                {
+                    XElement dataElem = imgElem.Element(ns + "Data") ?? imgElem.Element("Data");
+                    if (dataElem != null && dataElem.Attribute("encoding")?.Value == "base64")
+                    {
+                        pixelData = Convert.FromBase64String(dataElem.Value.Trim());
+                    }
+                }
+
+                if (pixelData == null) return null;
+
+                long requiredBytes = (long)srcWidth * srcHeight * channels * bytesPerSample;
+                if (pixelData.LongLength < requiredBytes) return null;
+
+                return ProcessRawBuffer(srcWidth, srcHeight, channels, sampleFormat, pixelStorage, pixelData, isThumbnail, targetDimension);
             }
-
-            if (pixelData == null) return null;
-
-            return ProcessRawBuffer(srcWidth, srcHeight, channels, sampleFormat, pixelStorage, pixelData, isThumbnail, targetDimension);
+            catch
+            {
+                // Any malformed/truncated/corrupt file falls back to "no preview" rather than propagating.
+                return null;
+            }
         }
 
         private static unsafe XisfRawFrame ProcessRawBuffer(int srcWidth, int srcHeight, int channels, string sampleFormat, string pixelStorage, byte[] pixelData, bool isThumbnail, int targetDimension)

@@ -30,7 +30,7 @@ Name: "{group}\XISF & FITS FastViewer"; Filename: "{app}\XisfFastViewer.exe"; Ic
 
 [Registry]
 ; -----------------------------------------------------------------------------
-; 1. APPLICATION REGISTRATION (Enables "Open with..." without overriding defaults)
+; 1. APPLICATION REGISTRATION ("Open with..." support)
 ; -----------------------------------------------------------------------------
 Root: HKLM; Subkey: "Software\Classes\Applications\XisfFastViewer.exe"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "XISF & FITS FastViewer"; Flags: uninsdeletekey
 Root: HKLM; Subkey: "Software\Classes\Applications\XisfFastViewer.exe\SupportedTypes"; ValueType: string; ValueName: ".xisf"; ValueData: ""; Flags: uninsdeletekey
@@ -39,7 +39,6 @@ Root: HKLM; Subkey: "Software\Classes\Applications\XisfFastViewer.exe\SupportedT
 Root: HKLM; Subkey: "Software\Classes\Applications\XisfFastViewer.exe\SupportedTypes"; ValueType: string; ValueName: ".fts"; ValueData: ""; Flags: uninsdeletekey
 Root: HKLM; Subkey: "Software\Classes\Applications\XisfFastViewer.exe\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\XisfFastViewer.exe"" ""%1"""; Flags: uninsdeletekey
 
-; Make FastViewer visible in Explorer's "Open with..." menu
 Root: HKLM; Subkey: "Software\Classes\.xisf\OpenWithProgids"; ValueType: string; ValueName: "XisfFastViewer.Assoc"; ValueData: ""; Flags: uninsdeletevalue
 Root: HKLM; Subkey: "Software\Classes\.fits\OpenWithProgids"; ValueType: string; ValueName: "XisfFastViewer.Assoc"; ValueData: ""; Flags: uninsdeletevalue
 Root: HKLM; Subkey: "Software\Classes\.fit\OpenWithProgids"; ValueType: string; ValueName: "XisfFastViewer.Assoc"; ValueData: ""; Flags: uninsdeletevalue
@@ -50,7 +49,63 @@ Root: HKLM; Subkey: "Software\Classes\XisfFastViewer.Assoc\DefaultIcon"; ValueTy
 Root: HKLM; Subkey: "Software\Classes\XisfFastViewer.Assoc\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\XisfFastViewer.exe"" ""%1"""
 
 ; -----------------------------------------------------------------------------
-; 2. OPTIONAL: DEFAULT ASSOCIATION (ONLY applied if "setdefault" task is checked)
+; 2. IMAGE PERCEIVED TYPE & THUMBNAIL TREATMENT
+; -----------------------------------------------------------------------------
+Root: HKLM; Subkey: "Software\Classes\.fits"; ValueType: string; ValueName: "PerceivedType"; ValueData: "image"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Classes\.fit"; ValueType: string; ValueName: "PerceivedType"; ValueData: "image"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Classes\.fts"; ValueType: string; ValueName: "PerceivedType"; ValueData: "image"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Classes\.xisf"; ValueType: string; ValueName: "PerceivedType"; ValueData: "image"; Flags: uninsdeletevalue
+
+Root: HKLM; Subkey: "Software\Classes\FitsFile"; ValueType: dword; ValueName: "Treatment"; ValueData: 0; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Classes\ASIFitsView"; ValueType: dword; ValueName: "Treatment"; ValueData: 0; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Classes\XisfFile"; ValueType: dword; ValueName: "Treatment"; ValueData: 0; Flags: uninsdeletevalue
+
+; -----------------------------------------------------------------------------
+; 3. THUMBNAIL HANDLER SHELLEX ({e357fccd-a995-4576-b01f-234630154e96})
+; CLSID: {D37B4D58-7F16-4BC9-9A07-4C0E51610E91}
+; -----------------------------------------------------------------------------
+; Extensions
+Root: HKLM; Subkey: "Software\Classes\.fits\ShellEx\{{e357fccd-a995-4576-b01f-234630154e96}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E91}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\.fit\ShellEx\{{e357fccd-a995-4576-b01f-234630154e96}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E91}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\.fts\ShellEx\{{e357fccd-a995-4576-b01f-234630154e96}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E91}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\.xisf\ShellEx\{{e357fccd-a995-4576-b01f-234630154e96}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E91}"; Flags: uninsdeletekey
+
+; SystemFileAssociations
+Root: HKLM; Subkey: "Software\Classes\SystemFileAssociations\.fits\ShellEx\{{e357fccd-a995-4576-b01f-234630154e96}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E91}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\SystemFileAssociations\.fit\ShellEx\{{e357fccd-a995-4576-b01f-234630154e96}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E91}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\SystemFileAssociations\.fts\ShellEx\{{e357fccd-a995-4576-b01f-234630154e96}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E91}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\SystemFileAssociations\.xisf\ShellEx\{{e357fccd-a995-4576-b01f-234630154e96}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E91}"; Flags: uninsdeletekey
+
+; ProgIDs (FitsFile, ASIFitsView, XisfFile)
+Root: HKLM; Subkey: "Software\Classes\FitsFile\ShellEx\{{e357fccd-a995-4576-b01f-234630154e96}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E91}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\ASIFitsView\ShellEx\{{e357fccd-a995-4576-b01f-234630154e96}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E91}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\XisfFile\ShellEx\{{e357fccd-a995-4576-b01f-234630154e96}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E91}"; Flags: uninsdeletekey
+
+; -----------------------------------------------------------------------------
+; 4. PREVIEW HANDLER SHELLEX ({8895b1c6-b41f-4c1c-a562-0d564250836f})
+; CLSID: {D37B4D58-7F16-4BC9-9A07-4C0E51610E92}
+; -----------------------------------------------------------------------------
+; Extensions
+Root: HKLM; Subkey: "Software\Classes\.fits\ShellEx\{{8895b1c6-b41f-4c1c-a562-0d564250836f}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E92}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\.fit\ShellEx\{{8895b1c6-b41f-4c1c-a562-0d564250836f}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E92}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\.fts\ShellEx\{{8895b1c6-b41f-4c1c-a562-0d564250836f}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E92}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\.xisf\ShellEx\{{8895b1c6-b41f-4c1c-a562-0d564250836f}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E92}"; Flags: uninsdeletekey
+
+; SystemFileAssociations
+Root: HKLM; Subkey: "Software\Classes\SystemFileAssociations\.fits\ShellEx\{{8895b1c6-b41f-4c1c-a562-0d564250836f}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E92}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\SystemFileAssociations\.fit\ShellEx\{{8895b1c6-b41f-4c1c-a562-0d564250836f}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E92}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\SystemFileAssociations\.fts\ShellEx\{{8895b1c6-b41f-4c1c-a562-0d564250836f}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E92}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\SystemFileAssociations\.xisf\ShellEx\{{8895b1c6-b41f-4c1c-a562-0d564250836f}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E92}"; Flags: uninsdeletekey
+
+; ProgIDs
+Root: HKLM; Subkey: "Software\Classes\FitsFile\ShellEx\{{8895b1c6-b41f-4c1c-a562-0d564250836f}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E92}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\ASIFitsView\ShellEx\{{8895b1c6-b41f-4c1c-a562-0d564250836f}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E92}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\XisfFile\ShellEx\{{8895b1c6-b41f-4c1c-a562-0d564250836f}"; ValueType: string; ValueName: ""; ValueData: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E92}"; Flags: uninsdeletekey
+
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\PreviewHandlers"; ValueType: string; ValueName: "{{D37B4D58-7F16-4BC9-9A07-4C0E51610E92}"; ValueData: "XISF & FITS Preview Handler"; Flags: uninsdeletevalue
+
+; -----------------------------------------------------------------------------
+; 5. OPTIONAL: DEFAULT ASSOCIATION (ONLY applied if "setdefault" is checked)
 ; -----------------------------------------------------------------------------
 Root: HKLM; Subkey: "Software\Classes\.xisf"; ValueType: string; ValueName: ""; ValueData: "XisfFastViewer.Assoc"; Flags: uninsdeletevalue; Tasks: setdefault
 Root: HKLM; Subkey: "Software\Classes\.fits"; ValueType: string; ValueName: ""; ValueData: "XisfFastViewer.Assoc"; Flags: uninsdeletevalue; Tasks: setdefault
@@ -58,7 +113,6 @@ Root: HKLM; Subkey: "Software\Classes\.fit"; ValueType: string; ValueName: ""; V
 Root: HKLM; Subkey: "Software\Classes\.fts"; ValueType: string; ValueName: ""; ValueData: "XisfFastViewer.Assoc"; Flags: uninsdeletevalue; Tasks: setdefault
 
 [Run]
-; COM Server Registration via 64-bit RegAsm for SharpShell Thumbnail & Preview Handlers
 Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\XisfFastViewer.exe"""; Flags: runhidden
 
 [UninstallRun]
