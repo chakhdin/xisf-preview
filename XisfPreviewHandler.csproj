@@ -1,18 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
+<PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
-    <UseWindowsForms>true</UseWindowsForms>
-    <LangVersion>latest</LangVersion>
-    <SignAssembly>true</SignAssembly>
-    <AssemblyOriginatorKeyFile>key.snk</AssemblyOriginatorKeyFile>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <StartupObject>XisfExplorerPreview.Program</StartupObject>
     <AssemblyName>XisfFastViewer</AssemblyName>
     <RootNamespace>XisfExplorerPreview</RootNamespace>
+    <UseWindowsForms>true</UseWindowsForms>
+    <PlatformTarget>x64</PlatformTarget> <!-- Change from x86 to x64 -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <StartupObject>XisfExplorerPreview.Program</StartupObject>
     <ApplicationIcon>app.ico</ApplicationIcon>
-  </PropertyGroup>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>key.snk</AssemblyOriginatorKeyFile>
+</PropertyGroup>
 
   <Target Name="KillSurrogatesBeforeBuild" BeforeTargets="BeforeBuild">
     <Exec Command="taskkill /f /im prevhost.exe 2&gt;nul || exit 0" />
