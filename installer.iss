@@ -15,6 +15,9 @@ PrivilegesRequiredOverridesAllowed=dialog
 ChangesAssociations=yes
 SetupIconFile=app.ico
 UsedUserAreasWarning=no
+CloseApplications=yes
+CloseApplicationsFilter=dllhost.exe,prevhost.exe
+RestartApplications=no
 
 [Files]
 Source: "bin\Release\net48\XisfFastViewer.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -91,6 +94,31 @@ Filename: "{dotnet4064}\regasm.exe"; Parameters: "/unregister ""{app}\XisfFastVi
 [Code]
 procedure SHChangeNotify(wEventId: Cardinal; uFlags: UINT; dwItem1, dwItem2: DWORD);
   external 'SHChangeNotify@shell32.dll stdcall';
+
+// CloseApplications/Restart Manager doesn't reliably catch the short-lived dllhost.exe/
+// prevhost.exe COM surrogates Explorer spawns per thumbnail/preview request, which is why
+// "DeleteFile failed; code 5 (Access is denied)" on XisfFastViewer.exe can still happen even
+// with it enabled. Kill them outright instead, same as the project's own build already does.
+procedure KillLockingProcesses();
+var
+  ResultCode: Integer;
+begin
+  Exec('taskkill.exe', '/F /IM dllhost.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('taskkill.exe', '/F /IM prevhost.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('taskkill.exe', '/F /IM XisfFastViewer.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  KillLockingProcesses();
+  Result := True;
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  KillLockingProcesses();
+  Result := True;
+end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
