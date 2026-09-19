@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>key.snk</AssemblyOriginatorKeyFile>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <StartupObject>XisfExplorerPreview.Program</StartupObject>
+    <AssemblyName>XisfFastViewer</AssemblyName>
+    <RootNamespace>XisfExplorerPreview</RootNamespace>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <Target Name="KillSurrogatesBeforeBuild" BeforeTargets="BeforeBuild">
+    <Exec Command="taskkill /f /im prevhost.exe 2&gt;nul || exit 0" />
+    <Exec Command="taskkill /f /im dllhost.exe 2&gt;nul || exit 0" />
+    <Exec Command="taskkill /f /im XisfFastViewer.exe 2&gt;nul || exit 0" />
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="SharpShell" Version="2.7.2" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="app.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>
