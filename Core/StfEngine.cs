@@ -48,7 +48,7 @@ namespace XisfExplorerPreview
                 Array.Sort(samples, 0, idx);
                 float median = idx > 0 ? samples[idx / 2] : 0.0f;
 
-                if (median >= 0.2f) // Already bright enough; skip stretch
+                if (median >= 0.1f) // Already bright enough; skip stretch
                 {
                     shadows[c] = 0.0f;
                     midtones[c] = 0.5f;
@@ -125,7 +125,7 @@ namespace XisfExplorerPreview
             float median = pooledSamples[idx / 2];
             frame.Median = median;
 
-            if (median >= 0.2f) // Already bright enough; skip stretch
+            if (median >= 0.1f) // Already bright enough; skip stretch
             {
                 frame.AutoShadows = 0.0f;
                 frame.AutoMidtones = 0.5f;
