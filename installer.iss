@@ -1,7 +1,7 @@
 [Setup]
 AppId={{D37B4D58-7F16-4BC9-9A07-4C0E51610E94}
 AppName=XISF & FITS Shell Preview & Viewer
-AppVersion=1.0
+AppVersion=1.01
 AppPublisher=Gruppo Astrofili Rozzano
 DefaultDirName={autopf}\XisfFastViewer
 DefaultGroupName=XISF FastViewer
