@@ -17,6 +17,9 @@ namespace XisfExplorerPreview
         public float Median { get; set; }
         public float MAD { get; set; }
 
+        // True when the image already looks stretched, so auto-STF was left as identity
+        public bool AutoStfSkipped { get; set; }
+
         // Linked STF parameters applied identically across channels
         public float AutoShadows { get; set; }
         public float AutoMidtones { get; set; } = 0.5f;

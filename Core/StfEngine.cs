@@ -16,7 +16,7 @@ namespace XisfExplorerPreview
             ComputeLinkedAutoStf(frame, isThumbnail);
 
             int activeChannels = Math.Min(frame.Channels, 3);
-            if (!isThumbnail && activeChannels >= 3)
+            if (!isThumbnail && activeChannels >= 3 && !frame.AutoStfSkipped)
             {
                 ComputeUnlinkedAutoStf(frame, activeChannels);
             }
@@ -125,8 +125,12 @@ namespace XisfExplorerPreview
             float median = pooledSamples[idx / 2];
             frame.Median = median;
 
-            if (median >= 0.1f) // Already bright enough; skip stretch
+            // Already finished: either bright overall, or a large share of pixels is bright
+            // (e.g. a planetary disc on a black sky, where the median alone is ~0).
+            float p99 = pooledSamples[Math.Min(idx - 1, (int)(idx * 0.99f))];
+            if (median >= 0.1f || p99 >= 0.5f)
             {
+                frame.AutoStfSkipped = true;
                 frame.AutoShadows = 0.0f;
                 frame.AutoMidtones = 0.5f;
                 frame.AutoHighlights = 1.0f;
