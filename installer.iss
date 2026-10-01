@@ -97,6 +97,8 @@ var
 procedure SHChangeNotify(wEventId: Cardinal; uFlags: UINT; dwItem1, dwItem2: DWORD);
   external 'SHChangeNotify@shell32.dll stdcall';
 
+// Explorer is not the only possible holder: any program that loads the shell handler
+// (e.g. PixInsight's file dialogs) can too - see WaitForFileUnlockedOrAsk.
 // Root cause confirmed by hand: Explorer holds a plain (non-FILE_SHARE_DELETE) read
 // handle on XisfFastViewer.exe merely from having its folder open in a view - long
 // enough to make DeleteFile fail with "Access is denied" even for a fully elevated
@@ -160,10 +162,11 @@ end;
 // before the file is actually deletable/overwritable (taskkill returning is not
 // proof the OS has released it). So don't just kill once and hope - keep killing
 // and retrying the delete until it actually succeeds, or give up after ~5s.
-procedure WaitForFileUnlocked(FileName: String);
+function WaitForFileUnlocked(FileName: String): Boolean;
 var
   i: Integer;
 begin
+  Result := True;
   if not FileExists(FileName) then
     exit;
   for i := 1 to 10 do
@@ -173,6 +176,69 @@ begin
     KillLockingProcesses();
     Sleep(500);
   end;
+  Result := False;
+end;
+
+// Any process that browses XISF/FITS files (PixInsight's file dialogs, an image
+// editor, a file manager, ...) can load our in-proc shell handler and keep
+// XisfFastViewer.exe/SharpShell.dll open. Those are ordinary applications that may
+// hold unsaved work, so don't kill them: ask the user to close them and retry.
+procedure WaitForFileUnlockedOrAsk(FileName: String);
+begin
+  while not WaitForFileUnlocked(FileName) do
+  begin
+    if SuppressibleMsgBox(
+         'Setup cannot replace ' + FileName + ' because another program is using it.' + #13#10#13#10 +
+         'Close programs that open or browse XISF/FITS files (for example PixInsight, ' +
+         'other image editors or file managers), then click Retry.',
+         mbError, MB_RETRYCANCEL, IDCANCEL) = IDCANCEL then
+      exit;
+  end;
+end;
+
+const
+  StaleThumbnailClsid = '{a71bc054-942c-4a5f-a4f7-d8b6f3e6c1d2}';
+  StalePreviewClsid = '{8f4c479b-84c1-4d56-8a5e-44e281f275e1}';
+  ThumbnailShellExKey = '{e357fccd-a995-4576-b01f-234630154e96}';
+  PreviewShellExKey = '{8895b1c6-b41f-4c1c-a562-0d564250836f}';
+
+// Older builds registered this assembly under different CLSIDs, hooked into the
+// PixInsight ProgID. ProgID-level handlers win over the extension-level ones we
+// register, so these leftovers shadow the current registration. Remove only
+// entries that point at our own assembly or at the stale CLSIDs above.
+procedure RemoveStaleClsid(Clsid: String);
+var
+  CodeBase: String;
+begin
+  if RegQueryStringValue(HKLM, 'Software\Classes\CLSID\' + Clsid + '\InprocServer32', 'CodeBase', CodeBase) and
+     (Pos('xisffastviewer.exe', Lowercase(CodeBase)) > 0) then
+    RegDeleteKeyIncludingSubkeys(HKLM, 'Software\Classes\CLSID\' + Clsid);
+  RegDeleteValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\PreviewHandlers', Clsid);
+end;
+
+procedure RemoveStaleShellEx(ClassName, HandlerKey, StaleClsid: String);
+var
+  Key, Value: String;
+begin
+  Key := 'Software\Classes\' + ClassName + '\ShellEx\' + HandlerKey;
+  if RegQueryStringValue(HKLM, Key, '', Value) and (CompareText(Value, StaleClsid) = 0) then
+    RegDeleteKeyIncludingSubkeys(HKLM, Key);
+end;
+
+procedure CleanStaleRegistrations();
+var
+  Classes: TArrayOfString;
+  i: Integer;
+begin
+  if RegGetSubkeyNames(HKLM, 'Software\Classes', Classes) then
+    for i := 0 to GetArrayLength(Classes) - 1 do
+      if Pos('.', Classes[i]) <> 1 then
+      begin
+        RemoveStaleShellEx(Classes[i], ThumbnailShellExKey, StaleThumbnailClsid);
+        RemoveStaleShellEx(Classes[i], PreviewShellExKey, StalePreviewClsid);
+      end;
+  RemoveStaleClsid(StaleThumbnailClsid);
+  RemoveStaleClsid(StalePreviewClsid);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -180,10 +246,11 @@ begin
   if CurStep = ssInstall then
   begin
     KillExplorerAndLockingProcesses();
-    WaitForFileUnlocked(ExpandConstant('{app}\XisfFastViewer.exe'));
+    WaitForFileUnlockedOrAsk(ExpandConstant('{app}\XisfFastViewer.exe'));
   end
   else if CurStep = ssPostInstall then
   begin
+    CleanStaleRegistrations();
     SHChangeNotify($08000000, 0, 0, 0); // SHCNE_ASSOCCHANGED
     RelaunchExplorerIfNeeded();
   end;
