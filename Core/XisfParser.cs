@@ -147,8 +147,26 @@ namespace XisfExplorerPreview
                         position < 0 || size < 0)
                         return null;
 
-                    reader.BaseStream.Seek(position, SeekOrigin.Begin);
-                    pixelData = reader.ReadBytes(size);
+                    long requiredAttachmentBytes = (long)srcWidth * srcHeight * channels * bytesPerSample;
+                    int step = ComputeStep(srcWidth, srcHeight, targetDimension);
+
+                    if (step > 1 && stream.CanSeek && size >= requiredAttachmentBytes)
+                    {
+                        // Downscaled request on a seekable stream (shell thumbnails): read only the
+                        // rows that survive the subsampling instead of the whole pixel block.
+                        pixelData = ReadSubsampled(stream, position, srcWidth, srcHeight, channels,
+                            bytesPerSample, pixelStorage, step);
+                        if (pixelData == null) return null;
+
+                        srcWidth /= step;
+                        srcHeight /= step;
+                        targetDimension = 0;
+                    }
+                    else
+                    {
+                        reader.BaseStream.Seek(position, SeekOrigin.Begin);
+                        pixelData = reader.ReadBytes(size);
+                    }
                 }
                 else if (location.StartsWith("inline:base64"))
                 {
@@ -177,6 +195,64 @@ namespace XisfExplorerPreview
                 // Any malformed/truncated/corrupt file falls back to "no preview" rather than propagating.
                 return null;
             }
+        }
+
+        private static int ComputeStep(int srcWidth, int srcHeight, int targetDimension)
+        {
+            if (targetDimension > 0 && (srcWidth > targetDimension || srcHeight > targetDimension))
+                return Math.Max(1, Math.Min(srcWidth / targetDimension, srcHeight / targetDimension));
+            return 1;
+        }
+
+        // Returns a compact (srcWidth/step x srcHeight/step) buffer in the same pixel storage
+        // as the source, containing exactly the samples ProcessRawBuffer would pick with this
+        // step. Reads one source row at a time, so memory and I/O scale with the output.
+        private static byte[] ReadSubsampled(Stream stream, long position, int srcWidth, int srcHeight,
+            int channels, int bytesPerSample, string pixelStorage, int step)
+        {
+            int outWidth = srcWidth / step;
+            int outHeight = srcHeight / step;
+            bool planar = pixelStorage == "Planar";
+
+            long channelSize = (long)srcWidth * srcHeight * bytesPerSample;
+            int rowSamples = planar ? srcWidth : srcWidth * channels;
+            byte[] row = new byte[rowSamples * bytesPerSample];
+            byte[] result = new byte[(long)outWidth * outHeight * channels * bytesPerSample];
+
+            for (int c = 0; c < (planar ? channels : 1); c++)
+            {
+                for (int y = 0; y < outHeight; y++)
+                {
+                    long rowStart = planar
+                        ? position + (c * channelSize) + ((long)y * step * srcWidth * bytesPerSample)
+                        : position + ((long)y * step * srcWidth * channels * bytesPerSample);
+
+                    stream.Seek(rowStart, SeekOrigin.Begin);
+                    int got = 0;
+                    while (got < row.Length)
+                    {
+                        int r = stream.Read(row, got, row.Length - got);
+                        if (r <= 0) return null; // truncated file
+                        got += r;
+                    }
+
+                    if (planar)
+                    {
+                        long dst = (c * (long)outWidth * outHeight + (long)y * outWidth) * bytesPerSample;
+                        for (int x = 0; x < outWidth; x++)
+                            Buffer.BlockCopy(row, x * step * bytesPerSample, result, (int)(dst + x * bytesPerSample), bytesPerSample);
+                    }
+                    else
+                    {
+                        int pixelBytes = channels * bytesPerSample;
+                        long dst = (long)y * outWidth * pixelBytes;
+                        for (int x = 0; x < outWidth; x++)
+                            Buffer.BlockCopy(row, x * step * pixelBytes, result, (int)(dst + x * pixelBytes), pixelBytes);
+                    }
+                }
+            }
+
+            return result;
         }
 
         private static unsafe XisfRawFrame ProcessRawBuffer(int srcWidth, int srcHeight, int channels, string sampleFormat, string pixelStorage, byte[] pixelData, bool isThumbnail, int targetDimension)

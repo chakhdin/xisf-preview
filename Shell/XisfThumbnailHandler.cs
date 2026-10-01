@@ -22,11 +22,15 @@ namespace XisfExplorerPreview
                 if (SelectedItemStream == null)
                     return null;
 
-                MemoryStream ms = new MemoryStream();
+                // A seekable stream lets the parser read only the rows a thumbnail needs
+                // instead of buffering the whole (possibly multi-GB) file in memory.
                 if (SelectedItemStream.CanSeek)
                 {
                     SelectedItemStream.Seek(0, SeekOrigin.Begin);
+                    return AstroFormatDetector.RenderImageFromStream(SelectedItemStream, (int)width);
                 }
+
+                MemoryStream ms = new MemoryStream();
                 SelectedItemStream.CopyTo(ms);
                 ms.Seek(0, SeekOrigin.Begin);
 
