@@ -18,3 +18,6 @@ bin/Installer/
 ## Visual Studio / VS Code
 .vs/
 .vscode/
+
+## Inno Setup install log
+install_log.txt
