@@ -23,6 +23,57 @@ namespace XisfExplorerPreview
         private const int MaxDimension = 65535;
         private const long MaxTotalPixels = 300_000_000L;
 
+        private static bool TryGetSeekableLength(Stream stream, out long length)
+        {
+            length = 0;
+            try
+            {
+                if (!stream.CanSeek) return false;
+                length = stream.Length;
+                return true;
+            }
+            catch (NotSupportedException)
+            {
+                return false;
+            }
+        }
+
+        // Returns the first activeChannels planes as a compact (width/step x height/step)
+        // top-down buffer holding exactly the samples the conversion loop would pick for this
+        // step. Reads one source row at a time, so memory and I/O scale with the output.
+        private static byte[] ReadSubsampledPlanes(Stream stream, long dataStart, int width, int height,
+            int activeChannels, int bytesPerPixel, int step, bool flipVertically)
+        {
+            int outWidth = width / step;
+            int outHeight = height / step;
+            long planeSize = (long)width * height * bytesPerPixel;
+            byte[] row = new byte[width * bytesPerPixel];
+            byte[] result = new byte[(long)outWidth * outHeight * activeChannels * bytesPerPixel];
+
+            for (int c = 0; c < activeChannels; c++)
+            {
+                for (int y = 0; y < outHeight; y++)
+                {
+                    int srcY = flipVertically ? (height - 1) - (y * step) : y * step;
+                    stream.Seek(dataStart + (c * planeSize) + ((long)srcY * width * bytesPerPixel), SeekOrigin.Begin);
+
+                    int got = 0;
+                    while (got < row.Length)
+                    {
+                        int r = stream.Read(row, got, row.Length - got);
+                        if (r <= 0) return null; // truncated file
+                        got += r;
+                    }
+
+                    long dst = (((long)c * outWidth * outHeight) + ((long)y * outWidth)) * bytesPerPixel;
+                    for (int x = 0; x < outWidth; x++)
+                        Buffer.BlockCopy(row, x * step * bytesPerPixel, result, (int)(dst + (x * bytesPerPixel)), bytesPerPixel);
+                }
+            }
+
+            return result;
+        }
+
         public static unsafe XisfRawFrame LoadRawFrame(Stream stream, int targetDimension = 0)
         {
             try
@@ -98,17 +149,6 @@ namespace XisfExplorerPreview
                 int bytesPerPixel = Math.Abs(bitpix) / 8;
                 long totalDataBytes = (long)width * height * activeChannels * bytesPerPixel;
 
-                byte[] rawBytes = new byte[totalDataBytes];
-                int totalRead = 0;
-                while (totalRead < totalDataBytes)
-                {
-                    int r = stream.Read(rawBytes, totalRead, (int)Math.Min(totalDataBytes - totalRead, 4194304));
-                    if (r <= 0) break;
-                    totalRead += r;
-                }
-
-                if (totalRead < totalDataBytes) return null; // truncated pixel data
-
                 // Classic FITS/IRAF convention stores row 1 at the bottom of the image, so a
                 // bottom-up-to-top-down flip is needed for on-screen display. Some writers
                 // (e.g. PixInsight) instead store row 1 at the top and say so explicitly via
@@ -124,6 +164,40 @@ namespace XisfExplorerPreview
                 if (targetDimension > 0 && (width > targetDimension || height > targetDimension))
                 {
                     step = Math.Max(1, Math.Min(width / targetDimension, height / targetDimension));
+                }
+
+                byte[] rawBytes = null;
+
+                // Downscaled request on a seekable stream (shell thumbnails): read only the rows
+                // that survive the subsampling instead of the whole data block. The header loop
+                // consumed whole 2880-byte blocks, so the stream is now at the start of the data.
+                if (step > 1 && TryGetSeekableLength(stream, out long streamLength))
+                {
+                    long dataStart = stream.Position;
+                    if (streamLength < dataStart + totalDataBytes) return null; // truncated pixel data
+
+                    rawBytes = ReadSubsampledPlanes(stream, dataStart, width, height, activeChannels,
+                        bytesPerPixel, step, flipVertically);
+                    if (rawBytes == null) return null;
+
+                    // rawBytes is now a compact, already top-down copy of the image.
+                    width /= step;
+                    height /= step;
+                    step = 1;
+                    flipVertically = false;
+                }
+                else
+                {
+                    rawBytes = new byte[totalDataBytes];
+                    int totalRead = 0;
+                    while (totalRead < totalDataBytes)
+                    {
+                        int r = stream.Read(rawBytes, totalRead, (int)Math.Min(totalDataBytes - totalRead, 4194304));
+                        if (r <= 0) break;
+                        totalRead += r;
+                    }
+
+                    if (totalRead < totalDataBytes) return null; // truncated pixel data
                 }
 
                 int outWidth = width / step;
