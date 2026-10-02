@@ -197,32 +197,51 @@ begin
 end;
 
 const
-  StaleThumbnailClsid = '{a71bc054-942c-4a5f-a4f7-d8b6f3e6c1d2}';
-  StalePreviewClsid = '{8f4c479b-84c1-4d56-8a5e-44e281f275e1}';
+  CurrentThumbnailClsid = '{D37B4D58-7F16-4BC9-9A07-4C0E51610E91}';
+  CurrentPreviewClsid = '{D37B4D58-7F16-4BC9-9A07-4C0E51610E92}';
+  KnownStaleThumbnailClsid = '{a71bc054-942c-4a5f-a4f7-d8b6f3e6c1d2}';
+  KnownStalePreviewClsid = '{8f4c479b-84c1-4d56-8a5e-44e281f275e1}';
   ThumbnailShellExKey = '{e357fccd-a995-4576-b01f-234630154e96}';
   PreviewShellExKey = '{8895b1c6-b41f-4c1c-a562-0d564250836f}';
 
-// Older builds registered this assembly under different CLSIDs, hooked into the
-// PixInsight ProgID. ProgID-level handlers win over the extension-level ones we
-// register, so these leftovers shadow the current registration. Remove only
-// entries that point at our own assembly or at the stale CLSIDs above.
-procedure RemoveStaleClsid(Clsid: String);
+// Older builds registered this assembly under other CLSIDs and hooked them into
+// ProgIDs (the PixInsight one, Fit.File, Fits.File, ...). ProgID-level handlers win
+// over the extension-level ones we register, so those leftovers shadow the current
+// registration - e.g. a stale, surrogate-less preview CLSID made previews of large
+// .fit files come up blank. A handler value is stale if it is not our current CLSID
+// and either is a known old one or its COM registration points at our own assembly.
+// Anything else (another product's handler) is never touched.
+function PointsAtOurAssembly(Clsid: String): Boolean;
 var
   CodeBase: String;
 begin
-  if RegQueryStringValue(HKLM, 'Software\Classes\CLSID\' + Clsid + '\InprocServer32', 'CodeBase', CodeBase) and
-     (Pos('xisffastviewer.exe', Lowercase(CodeBase)) > 0) then
+  Result := RegQueryStringValue(HKLM, 'Software\Classes\CLSID\' + Clsid + '\InprocServer32', 'CodeBase', CodeBase) and
+            (Pos('xisffastviewer.exe', Lowercase(CodeBase)) > 0);
+end;
+
+function IsStaleHandler(Value, CurrentClsid, KnownStaleClsid: String): Boolean;
+begin
+  Result := (Value <> '') and (CompareText(Value, CurrentClsid) <> 0) and
+            ((CompareText(Value, KnownStaleClsid) = 0) or PointsAtOurAssembly(Value));
+end;
+
+procedure RemoveStaleClsid(Clsid: String);
+begin
+  if PointsAtOurAssembly(Clsid) then
     RegDeleteKeyIncludingSubkeys(HKLM, 'Software\Classes\CLSID\' + Clsid);
   RegDeleteValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\PreviewHandlers', Clsid);
 end;
 
-procedure RemoveStaleShellEx(ClassName, HandlerKey, StaleClsid: String);
+procedure RemoveStaleShellEx(ClassName, HandlerKey, CurrentClsid, KnownStaleClsid: String);
 var
   Key, Value: String;
 begin
   Key := 'Software\Classes\' + ClassName + '\ShellEx\' + HandlerKey;
-  if RegQueryStringValue(HKLM, Key, '', Value) and (CompareText(Value, StaleClsid) = 0) then
+  if RegQueryStringValue(HKLM, Key, '', Value) and IsStaleHandler(Value, CurrentClsid, KnownStaleClsid) then
+  begin
     RegDeleteKeyIncludingSubkeys(HKLM, Key);
+    RemoveStaleClsid(Value);
+  end;
 end;
 
 procedure CleanStaleRegistrations();
@@ -234,13 +253,12 @@ begin
     for i := 0 to GetArrayLength(Classes) - 1 do
       if Pos('.', Classes[i]) <> 1 then
       begin
-        RemoveStaleShellEx(Classes[i], ThumbnailShellExKey, StaleThumbnailClsid);
-        RemoveStaleShellEx(Classes[i], PreviewShellExKey, StalePreviewClsid);
+        RemoveStaleShellEx(Classes[i], ThumbnailShellExKey, CurrentThumbnailClsid, KnownStaleThumbnailClsid);
+        RemoveStaleShellEx(Classes[i], PreviewShellExKey, CurrentPreviewClsid, KnownStalePreviewClsid);
       end;
-  RemoveStaleClsid(StaleThumbnailClsid);
-  RemoveStaleClsid(StalePreviewClsid);
+  RemoveStaleClsid(KnownStaleThumbnailClsid);
+  RemoveStaleClsid(KnownStalePreviewClsid);
 end;
-
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssInstall then
