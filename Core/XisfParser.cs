@@ -3,6 +3,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace XisfExplorerPreview
@@ -62,7 +63,9 @@ namespace XisfExplorerPreview
         // Hard ceilings guarding against corrupt/hostile files: a malformed header should
         // fail gracefully instead of triggering a huge allocation or an out-of-bounds
         // unsafe read (which, unlike a normal exception, can crash the shell/COM host).
-        private const long MaxHeaderBytes = 64L * 1024 * 1024;
+        // XDocument inflates the XML roughly tenfold in memory, and real XISF headers
+        // (even with an inline thumbnail) stay far below this.
+        private const long MaxHeaderBytes = 16L * 1024 * 1024;
         private const int MaxDimension = 65535;
         private const long MaxTotalPixels = 300_000_000L;
 
@@ -88,7 +91,17 @@ namespace XisfExplorerPreview
 
                 string xmlContent = Encoding.UTF8.GetString(xmlBytes);
 
-                XDocument xdoc = XDocument.Parse(xmlContent);
+                // XDocument.Parse enables DTD processing on .NET Framework, which allows
+                // entity-expansion bombs; prohibit DTDs and never resolve external entities.
+                XmlReaderSettings xmlSettings = new XmlReaderSettings
+                {
+                    DtdProcessing = DtdProcessing.Prohibit,
+                    XmlResolver = null,
+                    MaxCharactersInDocument = xmlContent.Length
+                };
+                XDocument xdoc;
+                using (XmlReader xmlReader = XmlReader.Create(new StringReader(xmlContent), xmlSettings))
+                    xdoc = XDocument.Load(xmlReader);
                 XNamespace ns = "http://www.pixinsight.com/xisf";
 
                 XElement imgElem = xdoc.Root?.Descendants(ns + "Image").FirstOrDefault();
@@ -148,9 +161,17 @@ namespace XisfExplorerPreview
                         return null;
 
                     long requiredAttachmentBytes = (long)srcWidth * srcHeight * channels * bytesPerSample;
+
+                    // Validate against the declared geometry and the real file length before
+                    // allocating anything, so a tiny file cannot request a huge buffer.
+                    if (size < requiredAttachmentBytes || requiredAttachmentBytes > int.MaxValue)
+                        return null;
+                    if (stream.CanSeek && position + requiredAttachmentBytes > stream.Length)
+                        return null;
+
                     int step = ComputeStep(srcWidth, srcHeight, targetDimension);
 
-                    if (step > 1 && stream.CanSeek && size >= requiredAttachmentBytes)
+                    if (step > 1 && stream.CanSeek)
                     {
                         // Downscaled request on a seekable stream (shell thumbnails): read only the
                         // rows that survive the subsampling instead of the whole pixel block.
@@ -165,7 +186,7 @@ namespace XisfExplorerPreview
                     else
                     {
                         reader.BaseStream.Seek(position, SeekOrigin.Begin);
-                        pixelData = reader.ReadBytes(size);
+                        pixelData = reader.ReadBytes((int)requiredAttachmentBytes);
                     }
                 }
                 else if (location.StartsWith("inline:base64"))

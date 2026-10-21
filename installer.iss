@@ -1,7 +1,7 @@
 [Setup]
 AppId={{D37B4D58-7F16-4BC9-9A07-4C0E51610E94}
 AppName=XISF & FITS Shell Preview & Viewer
-AppVersion=1.02
+AppVersion=1.03
 AppPublisher=Gruppo Astrofili Rozzano
 DefaultDirName={autopf}\XisfFastViewer
 DefaultGroupName=XISF FastViewer
@@ -108,13 +108,20 @@ procedure SHChangeNotify(wEventId: Cardinal; uFlags: UINT; dwItem1, dwItem2: DWO
 // but proved unreliable on its own for the short-lived dllhost.exe/prevhost.exe COM
 // surrogates too, so kill everything outright as a fallback and restart Explorer
 // ourselves afterwards instead of trusting RestartApplications alone.
+// Always run system tools by full path: this process is elevated, so never let a
+// bare name be resolved through the search path.
+function SysTool(Name: String): String;
+begin
+  Result := ExpandConstant('{sys}\' + Name);
+end;
+
 procedure KillLockingProcesses();
 var
   ResultCode: Integer;
 begin
-  Exec('taskkill.exe', '/F /IM dllhost.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec('taskkill.exe', '/F /IM prevhost.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec('taskkill.exe', '/F /IM XisfFastViewer.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(SysTool('taskkill.exe'), '/F /IM dllhost.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(SysTool('taskkill.exe'), '/F /IM prevhost.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(SysTool('taskkill.exe'), '/F /IM XisfFastViewer.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
 // Only called right before the actual file copy/removal, not during the wizard -
@@ -124,7 +131,7 @@ procedure KillExplorerAndLockingProcesses();
 var
   ResultCode: Integer;
 begin
-  Exec('taskkill.exe', '/F /IM explorer.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(SysTool('taskkill.exe'), '/F /IM explorer.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   ExplorerWasKilled := True;
   KillLockingProcesses();
 end;
@@ -140,22 +147,14 @@ begin
     // shell (this is why the desktop/taskbar stayed gone after the file-copy step).
     // /trustlevel:0x20000 explicitly de-elevates the new process to Medium integrity,
     // the same mechanism Task Manager uses for its "Run new task" (unprivileged) option.
-    Exec('runas.exe', '/trustlevel:0x20000 "' + ExpandConstant('{win}') + '\explorer.exe"', '', SW_SHOWNORMAL, ewNoWait, ResultCode);
+    Exec(SysTool('runas.exe'), '/trustlevel:0x20000 "' + ExpandConstant('{win}') + '\explorer.exe"', '', SW_SHOWNORMAL, ewNoWait, ResultCode);
     ExplorerWasKilled := False;
   end;
 end;
 
-function InitializeSetup(): Boolean;
-begin
-  KillLockingProcesses();
-  Result := True;
-end;
-
-function InitializeUninstall(): Boolean;
-begin
-  KillLockingProcesses();
-  Result := True;
-end;
+// Deliberately no InitializeSetup/InitializeUninstall hook that kills processes:
+// dllhost.exe hosts COM surrogates of unrelated programs, so nothing is killed until
+// the user has confirmed (ssInstall / usUninstall below).
 
 // Even after a process hosting the exe as an executable image is killed, Windows
 // can hold the underlying image section open for a short, unpredictable moment

@@ -14,7 +14,9 @@
     <AssemblyOriginatorKeyFile>key.snk</AssemblyOriginatorKeyFile>
 </PropertyGroup>
 
-  <Target Name="KillSurrogatesBeforeBuild" BeforeTargets="BeforeBuild">
+  <!-- Releases file locks held by installed shell handlers. Kills every dllhost.exe/prevhost.exe
+       on the machine, so skip it with: dotnet build -p:SkipKillSurrogates=true -->
+  <Target Name="KillSurrogatesBeforeBuild" BeforeTargets="BeforeBuild" Condition="'$(SkipKillSurrogates)' != 'true'">
     <Exec Command="taskkill /f /im prevhost.exe 2&gt;nul || exit 0" />
     <Exec Command="taskkill /f /im dllhost.exe 2&gt;nul || exit 0" />
     <Exec Command="taskkill /f /im XisfFastViewer.exe 2&gt;nul || exit 0" />
