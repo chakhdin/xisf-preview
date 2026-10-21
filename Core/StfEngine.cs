@@ -211,9 +211,9 @@ namespace XisfExplorerPreview
 
         private static unsafe Bitmap RenderBitmapFromRawUnlinked(XisfRawFrame frame, float[] shadows, float[] midtones, float[] highlights, int renderStep)
         {
-            byte[] lutR = BuildStfLut(shadows[0], midtones[0], highlights[0]);
-            byte[] lutG = BuildStfLut(shadows[1], midtones[1], highlights[1]);
-            byte[] lutB = BuildStfLut(shadows[2], midtones[2], highlights[2]);
+            StfParams stfR = new StfParams(shadows[0], midtones[0], highlights[0]);
+            StfParams stfG = new StfParams(shadows[1], midtones[1], highlights[1]);
+            StfParams stfB = new StfParams(shadows[2], midtones[2], highlights[2]);
 
             int outWidth = frame.Width / renderStep;
             int outHeight = frame.Height / renderStep;
@@ -243,9 +243,9 @@ namespace XisfExplorerPreview
                         int srcX = x * renderStep;
                         int srcIdx = (srcRowOffset + srcX) * channels;
 
-                        byte r = SampleLut(localNorm[srcIdx], lutR);
-                        byte g = SampleLut(localNorm[srcIdx + 1], lutG);
-                        byte b = SampleLut(localNorm[srcIdx + 2], lutB);
+                        byte r = ApplyStf(localNorm[srcIdx], stfR);
+                        byte g = ApplyStf(localNorm[srcIdx + 1], stfG);
+                        byte b = ApplyStf(localNorm[srcIdx + 2], stfB);
 
                         int bIdx = x * 3;
                         row[bIdx] = b;
@@ -261,7 +261,7 @@ namespace XisfExplorerPreview
 
         public static unsafe Bitmap RenderBitmapFromRaw(XisfRawFrame frame, float shadows, float midtones, float highlights, int renderStep = 1)
         {
-            byte[] lut = BuildStfLut(shadows, midtones, highlights);
+            StfParams stf = new StfParams(shadows, midtones, highlights);
 
             int outWidth = frame.Width / renderStep;
             int outHeight = frame.Height / renderStep;
@@ -295,9 +295,9 @@ namespace XisfExplorerPreview
                         float gNorm = channels > 1 ? localNorm[srcIdx + 1] : rNorm;
                         float bNorm = channels > 2 ? localNorm[srcIdx + 2] : (channels > 1 ? gNorm : rNorm);
 
-                        byte r = SampleLut(rNorm, lut);
-                        byte g = SampleLut(gNorm, lut);
-                        byte b = SampleLut(bNorm, lut);
+                        byte r = ApplyStf(rNorm, stf);
+                        byte g = ApplyStf(gNorm, stf);
+                        byte b = ApplyStf(bNorm, stf);
 
                         int bIdx = x * 3;
                         row[bIdx] = b;
@@ -311,42 +311,29 @@ namespace XisfExplorerPreview
             return bmp;
         }
 
-        private static byte SampleLut(float norm, byte[] lut)
+        private struct StfParams
         {
-            int idx = (int)(norm * 4095.0f + 0.5f);
-            if (idx < 0) idx = 0;
-            else if (idx > 4095) idx = 4095;
-            return lut[idx];
+            public readonly float C0, Range, C1, M;
+
+            public StfParams(float c0, float m, float c1)
+            {
+                C0 = c0;
+                C1 = c1;
+                M = m;
+                Range = Math.Max(0.00001f, c1 - c0);
+            }
         }
 
-        private static byte[] BuildStfLut(float c0, float m, float c1)
+        // Evaluated per pixel instead of through a lookup table: linear astro data keeps
+        // nearly all its signal in the lowest percent of the 0..1 range, where even a
+        // 4096-entry table leaves only a handful of distinct inputs (visible as banding).
+        private static byte ApplyStf(float x, StfParams p)
         {
-            const int lutSize = 4096;
-            byte[] lut = new byte[lutSize];
-            float range = Math.Max(0.00001f, c1 - c0);
+            if (!(x > p.C0)) return 0; // also catches NaN
+            if (x >= p.C1) return 255;
 
-            for (int i = 0; i < lutSize; i++)
-            {
-                float x = i / (float)(lutSize - 1);
-
-                if (x <= c0)
-                {
-                    lut[i] = 0;
-                    continue;
-                }
-                if (x >= c1)
-                {
-                    lut[i] = 255;
-                    continue;
-                }
-
-                float clipped = (x - c0) / range;
-                float stretched = MTF(m, clipped);
-
-                lut[i] = (byte)Math.Max(0, Math.Min(255, (int)(stretched * 255.0f + 0.5f)));
-            }
-
-            return lut;
+            float stretched = MTF(p.M, (x - p.C0) / p.Range);
+            return (byte)(stretched * 255.0f + 0.5f);
         }
     }
 }
