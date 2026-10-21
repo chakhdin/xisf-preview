@@ -1,7 +1,7 @@
 [Setup]
 AppId={{D37B4D58-7F16-4BC9-9A07-4C0E51610E94}
 AppName=XISF & FITS Shell Preview & Viewer
-AppVersion=1.03
+AppVersion=1.04
 AppPublisher=Gruppo Astrofili Rozzano
 DefaultDirName={autopf}\XisfFastViewer
 DefaultGroupName=XISF FastViewer
@@ -19,9 +19,9 @@ CloseApplicationsFilter=explorer.exe,dllhost.exe,prevhost.exe
 RestartApplications=yes
 
 [Files]
-Source: "bin\Release\net48\XisfFastViewer.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "bin\Release\net48\SharpShell.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "bin\Release\net48\*.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "bin\Release\net48\XisfFastViewer.exe"; DestDir: "{app}"; Flags: ignoreversion restartreplace
+Source: "bin\Release\net48\SharpShell.dll"; DestDir: "{app}"; Flags: ignoreversion restartreplace
+Source: "bin\Release\net48\*.dll"; DestDir: "{app}"; Flags: ignoreversion restartreplace
 Source: "app.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
@@ -178,20 +178,110 @@ begin
   Result := False;
 end;
 
+// Names the programs holding the installed handler files, via the Restart Manager.
+// Setup runs elevated, so the query is passed to PowerShell as an -EncodedCommand
+// (no script file in a user-writable temp folder). The source is tools\holders.ps1;
+// regenerate the encoded text below after changing it with:
+//   [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes((Get-Content tools\holders.ps1 -Raw)))
+function HoldersScript(): String;
+begin
+  Result := '';
+  Result := Result + 'IwAgAEwAaQBzAHQAcwAgAHQAaABlACAAcAByAG8AZwByAGEAbQBzACAAdABoAGEAdAAgAGgAbwBsAGQAIAB0AGgAZQAgAGkAbgBzAHQAYQBsAGwAZQBkACAAaABhAG4AZABsAGUAcgAgAGYAaQBsAGUAcwAgAG8AcABlAG4AIAAoAFIAZQBz';
+  Result := Result + 'AHQAYQByAHQAIABNAGEAbgBhAGcAZQByACkALgAKACMAIABVAHMAZQBkACAAYgB5ACAAaQBuAHMAdABhAGwAbABlAHIALgBpAHMAcwAsACAAdwBoAGkAYwBoACAAZQBtAGIAZQBkAHMAIAB0AGgAaQBzACAAcwBjAHIAaQBwAHQAIABhAHMA';
+  Result := Result + 'IABhACAAYgBhAHMAZQA2ADQAIAAtAEUAbgBjAG8AZABlAGQAQwBvAG0AbQBhAG4AZAAgACgAcwBlAGUAIAB0AGgAZQAKACMAIABjAG8AbQBtAGUAbgB0ACAAYQBiAG8AdgBlACAASABvAGwAZABlAHIAcwBTAGMAcgBpAHAAdAAgAHQAaABl';
+  Result := Result + 'AHIAZQAgAGYAbwByACAAaABvAHcAIAB0AG8AIAByAGUAZwBlAG4AZQByAGEAdABlACAAaQB0ACkALgAKACMAIABJAG4AcAB1AHQAIAAoAGUAbgB2AGkAcgBvAG4AbQBlAG4AdAApADoAIABYAEkAUwBGAF8AUgBNAF8ARABJAFIAIAA9ACAA';
+  Result := Result + 'aQBuAHMAdABhAGwAbAAgAGYAbwBsAGQAZQByACwAIABYAEkAUwBGAF8AUgBNAF8ATwBVAFQAIAA9ACAAcgBlAHMAdQBsAHQAIABmAGkAbABlAC4ACgB0AHIAeQAgAHsACgBBAGQAZAAtAFQAeQBwAGUAIAAtAFQAeQBwAGUARABlAGYAaQBu';
+  Result := Result + 'AGkAdABpAG8AbgAgAEAAJwAKAHUAcwBpAG4AZwAgAFMAeQBzAHQAZQBtADsAIAB1AHMAaQBuAGcAIABTAHkAcwB0AGUAbQAuAFIAdQBuAHQAaQBtAGUALgBJAG4AdABlAHIAbwBwAFMAZQByAHYAaQBjAGUAcwA7ACAAdQBzAGkAbgBnACAA';
+  Result := Result + 'UwB5AHMAdABlAG0ALgBDAG8AbABsAGUAYwB0AGkAbwBuAHMALgBHAGUAbgBlAHIAaQBjADsACgBwAHUAYgBsAGkAYwAgAHMAdABhAHQAaQBjACAAYwBsAGEAcwBzACAAUgBNACAAewAKACAAIABbAFMAdAByAHUAYwB0AEwAYQB5AG8AdQB0';
+  Result := Result + 'ACgATABhAHkAbwB1AHQASwBpAG4AZAAuAFMAZQBxAHUAZQBuAHQAaQBhAGwAKQBdACAAcwB0AHIAdQBjAHQAIABGAFQAIAB7ACAAcAB1AGIAbABpAGMAIAB1AGkAbgB0ACAAbABvACwAIABoAGkAOwAgAH0ACgAgACAAWwBTAHQAcgB1AGMA';
+  Result := Result + 'dABMAGEAeQBvAHUAdAAoAEwAYQB5AG8AdQB0AEsAaQBuAGQALgBTAGUAcQB1AGUAbgB0AGkAYQBsACkAXQAgAHMAdAByAHUAYwB0ACAAVQBQACAAewAgAHAAdQBiAGwAaQBjACAAaQBuAHQAIABwAGkAZAA7ACAAcAB1AGIAbABpAGMAIABG';
+  Result := Result + 'AFQAIABzAHQAYQByAHQAOwAgAH0ACgAgACAAWwBTAHQAcgB1AGMAdABMAGEAeQBvAHUAdAAoAEwAYQB5AG8AdQB0AEsAaQBuAGQALgBTAGUAcQB1AGUAbgB0AGkAYQBsACwAIABDAGgAYQByAFMAZQB0AD0AQwBoAGEAcgBTAGUAdAAuAFUA';
+  Result := Result + 'bgBpAGMAbwBkAGUAKQBdACAAcwB0AHIAdQBjAHQAIABQAEkAIAB7AAoAIAAgACAAIABwAHUAYgBsAGkAYwAgAFUAUAAgAHAAOwAgAFsATQBhAHIAcwBoAGEAbABBAHMAKABVAG4AbQBhAG4AYQBnAGUAZABUAHkAcABlAC4AQgB5AFYAYQBs';
+  Result := Result + 'AFQAUwB0AHIALAAgAFMAaQB6AGUAQwBvAG4AcwB0AD0AMgA1ADYAKQBdACAAcAB1AGIAbABpAGMAIABzAHQAcgBpAG4AZwAgAGEAcABwADsACgAgACAAIAAgAFsATQBhAHIAcwBoAGEAbABBAHMAKABVAG4AbQBhAG4AYQBnAGUAZABUAHkA';
+  Result := Result + 'cABlAC4AQgB5AFYAYQBsAFQAUwB0AHIALAAgAFMAaQB6AGUAQwBvAG4AcwB0AD0ANgA0ACkAXQAgAHAAdQBiAGwAaQBjACAAcwB0AHIAaQBuAGcAIABzAHYAYwA7ACAAcAB1AGIAbABpAGMAIABpAG4AdAAgAHQAeQBwAGUALAAgAHMAdABh';
+  Result := Result + 'AHQAdQBzACwAIAB0AHMAOwAgAFsATQBhAHIAcwBoAGEAbABBAHMAKABVAG4AbQBhAG4AYQBnAGUAZABUAHkAcABlAC4AQgBvAG8AbAApAF0AIABwAHUAYgBsAGkAYwAgAGIAbwBvAGwAIAByAGUAcwB0ADsAIAB9AAoAIAAgAFsARABsAGwA';
+  Result := Result + 'SQBtAHAAbwByAHQAKAAiAHIAcwB0AHIAdABtAGcAcgAuAGQAbABsACIALAAgAEMAaABhAHIAUwBlAHQAPQBDAGgAYQByAFMAZQB0AC4AVQBuAGkAYwBvAGQAZQApAF0AIABzAHQAYQB0AGkAYwAgAGUAeAB0AGUAcgBuACAAaQBuAHQAIABS';
+  Result := Result + 'AG0AUwB0AGEAcgB0AFMAZQBzAHMAaQBvAG4AKABvAHUAdAAgAHUAaQBuAHQAIABoACwAIABpAG4AdAAgAGYALAAgAHMAdAByAGkAbgBnACAAawApADsACgAgACAAWwBEAGwAbABJAG0AcABvAHIAdAAoACIAcgBzAHQAcgB0AG0AZwByAC4A';
+  Result := Result + 'ZABsAGwAIgApAF0AIABzAHQAYQB0AGkAYwAgAGUAeAB0AGUAcgBuACAAaQBuAHQAIABSAG0ARQBuAGQAUwBlAHMAcwBpAG8AbgAoAHUAaQBuAHQAIABoACkAOwAKACAAIABbAEQAbABsAEkAbQBwAG8AcgB0ACgAIgByAHMAdAByAHQAbQBn';
+  Result := Result + 'AHIALgBkAGwAbAAiACwAIABDAGgAYQByAFMAZQB0AD0AQwBoAGEAcgBTAGUAdAAuAFUAbgBpAGMAbwBkAGUAKQBdACAAcwB0AGEAdABpAGMAIABlAHgAdABlAHIAbgAgAGkAbgB0ACAAUgBtAFIAZQBnAGkAcwB0AGUAcgBSAGUAcwBvAHUA';
+  Result := Result + 'cgBjAGUAcwAoAHUAaQBuAHQAIABoACwAIAB1AGkAbgB0ACAAbgAsACAAcwB0AHIAaQBuAGcAWwBdACAAZgAsACAAdQBpAG4AdAAgAGEALAAgAEkAbgB0AFAAdAByACAAYgAsACAAdQBpAG4AdAAgAHMALAAgAEkAbgB0AFAAdAByACAAYwAp';
+  Result := Result + 'ADsACgAgACAAWwBEAGwAbABJAG0AcABvAHIAdAAoACIAcgBzAHQAcgB0AG0AZwByAC4AZABsAGwAIgApAF0AIABzAHQAYQB0AGkAYwAgAGUAeAB0AGUAcgBuACAAaQBuAHQAIABSAG0ARwBlAHQATABpAHMAdAAoAHUAaQBuAHQAIABoACwA';
+  Result := Result + 'IABvAHUAdAAgAHUAaQBuAHQAIABuAGUAZQBkACwAIAByAGUAZgAgAHUAaQBuAHQAIABuACwAIABbAEkAbgAsAE8AdQB0AF0AIABQAEkAWwBdACAAaQBuAGYAbwAsACAAbwB1AHQAIAB1AGkAbgB0ACAAcgBlAGEAcwBvAG4AcwApADsACgAg';
+  Result := Result + 'ACAAcAB1AGIAbABpAGMAIABzAHQAYQB0AGkAYwAgAEwAaQBzAHQAPABzAHQAcgBpAG4AZwA+ACAAVwBoAG8AKABzAHQAcgBpAG4AZwAgAHAAYQB0AGgAKQAgAHsACgAgACAAIAAgAHYAYQByACAAcgAgAD0AIABuAGUAdwAgAEwAaQBzAHQA';
+  Result := Result + 'PABzAHQAcgBpAG4AZwA+ACgAKQA7ACAAdQBpAG4AdAAgAGgAOwAgAHMAdAByAGkAbgBnACAAawBlAHkAIAA9ACAARwB1AGkAZAAuAE4AZQB3AEcAdQBpAGQAKAApAC4AVABvAFMAdAByAGkAbgBnACgAKQA7AAoAIAAgACAAIABpAGYAIAAo';
+  Result := Result + 'AFIAbQBTAHQAYQByAHQAUwBlAHMAcwBpAG8AbgAoAG8AdQB0ACAAaAAsACAAMAAsACAAawBlAHkAKQAgACEAPQAgADAAKQAgAHIAZQB0AHUAcgBuACAAcgA7AAoAIAAgACAAIAB0AHIAeQAgAHsAIABSAG0AUgBlAGcAaQBzAHQAZQByAFIA';
+  Result := Result + 'ZQBzAG8AdQByAGMAZQBzACgAaAAsACAAMQAsACAAbgBlAHcAWwBdAHsAcABhAHQAaAB9ACwAIAAwACwAIABJAG4AdABQAHQAcgAuAFoAZQByAG8ALAAgADAALAAgAEkAbgB0AFAAdAByAC4AWgBlAHIAbwApADsACgAgACAAIAAgACAAIAB1';
+  Result := Result + 'AGkAbgB0ACAAbgBlAGUAZAA9ADAALAAgAG4APQAwACwAIAByAGUAYQBzAG8AbgBzADsAIABSAG0ARwBlAHQATABpAHMAdAAoAGgALAAgAG8AdQB0ACAAbgBlAGUAZAAsACAAcgBlAGYAIABuACwAIABuAHUAbABsACwAIABvAHUAdAAgAHIA';
+  Result := Result + 'ZQBhAHMAbwBuAHMAKQA7AAoAIAAgACAAIAAgACAAaQBmACAAKABuAGUAZQBkAD4AMAApACAAewAgAG4APQBuAGUAZQBkADsAIAB2AGEAcgAgAGEAPQBuAGUAdwAgAFAASQBbAG4AXQA7ACAAaQBmACAAKABSAG0ARwBlAHQATABpAHMAdAAo';
+  Result := Result + 'AGgALAAgAG8AdQB0ACAAbgBlAGUAZAAsACAAcgBlAGYAIABuACwAIABhACwAIABvAHUAdAAgAHIAZQBhAHMAbwBuAHMAKQA9AD0AMAApACAAZgBvAHIAKABpAG4AdAAgAGkAPQAwADsAaQA8AG4AOwBpACsAKwApACAAcgAuAEEAZABkACgA';
+  Result := Result + 'YQBbAGkAXQAuAGEAcABwACsAIgAgACgAUABJAEQAIAAiACsAYQBbAGkAXQAuAHAALgBwAGkAZAArACIAKQAiACkAOwAgAH0ACgAgACAAIAAgAH0AIABmAGkAbgBhAGwAbAB5ACAAewAgAFIAbQBFAG4AZABTAGUAcwBzAGkAbwBuACgAaAAp';
+  Result := Result + 'ADsAIAB9AAoAIAAgACAAIAByAGUAdAB1AHIAbgAgAHIAOwAKACAAIAB9AAoAfQAKACcAQAAKACQAbgBhAG0AZQBzACAAPQAgAGYAbwByAGUAYQBjAGgAIAAoACQAZgAgAGkAbgAgACcAWABpAHMAZgBGAGEAcwB0AFYAaQBlAHcAZQByAC4A';
+  Result := Result + 'ZQB4AGUAJwAsACcAUwBoAGEAcgBwAFMAaABlAGwAbAAuAGQAbABsACcAKQAgAHsAIABbAFIATQBdADoAOgBXAGgAbwAoACgASgBvAGkAbgAtAFAAYQB0AGgAIAAkAGUAbgB2ADoAWABJAFMARgBfAFIATQBfAEQASQBSACAAJABmACkAKQAg';
+  Result := Result + 'AH0ACgAkAG4AYQBtAGUAcwAgAHwAIABTAG8AcgB0AC0ATwBiAGoAZQBjAHQAIAAtAFUAbgBpAHEAdQBlACAAfAAgAFMAZQB0AC0AQwBvAG4AdABlAG4AdAAgAC0AUABhAHQAaAAgACQAZQBuAHYAOgBYAEkAUwBGAF8AUgBNAF8ATwBVAFQA';
+  Result := Result + 'IAAtAEUAbgBjAG8AZABpAG4AZwAgAEEAUwBDAEkASQAKAH0AIABjAGEAdABjAGgAIAB7ACAAfQAKAA==';
+end;
+
+function SetEnvironmentVariable(Name, Value: String): Integer;
+  external 'SetEnvironmentVariableW@kernel32.dll stdcall';
+
+// Returns one "  - Name (PID n)" line per holder, or '' if none was found or the query failed.
+function GetLockingPrograms(): String;
+var
+  ResultCode, i: Integer;
+  OutFile, Line: String;
+  Lines: TArrayOfString;
+begin
+  Result := '';
+  OutFile := ExpandConstant('{tmp}\xisf_holders.txt');
+  DeleteFile(OutFile);
+  SetEnvironmentVariable('XISF_RM_DIR', ExpandConstant('{app}'));
+  SetEnvironmentVariable('XISF_RM_OUT', OutFile);
+  if Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+          '-NoProfile -NonInteractive -EncodedCommand ' + HoldersScript(), '',
+          SW_HIDE, ewWaitUntilTerminated, ResultCode) and LoadStringsFromFile(OutFile, Lines) then
+    for i := 0 to GetArrayLength(Lines) - 1 do
+    begin
+      Line := Trim(Lines[i]);
+      if Line <> '' then
+        Result := Result + '  - ' + Line + #13#10;
+    end;
+end;
+
 // Any process that browses XISF/FITS files (PixInsight's file dialogs, an image
 // editor, a file manager, ...) can load our in-proc shell handler and keep
 // XisfFastViewer.exe/SharpShell.dll open. Those are ordinary applications that may
-// hold unsaved work, so don't kill them: ask the user to close them and retry.
+// hold unsaved work, so don't kill them: ask the user to close them and retry, or to
+// let Setup finish at the next restart (the [Files] entries use restartreplace, so
+// Windows swaps the locked files in during the next boot).
 procedure WaitForFileUnlockedOrAsk(FileName: String);
+var
+  Answer: Integer;
+  Holders, Text: String;
 begin
   while not WaitForFileUnlocked(FileName) do
   begin
-    if SuppressibleMsgBox(
-         'Setup cannot replace ' + FileName + ' because another program is using it.' + #13#10#13#10 +
-         'Close programs that open or browse XISF/FITS files (for example PixInsight, ' +
-         'other image editors or file managers), then click Retry.',
-         mbError, MB_RETRYCANCEL, IDCANCEL) = IDCANCEL then
-      exit;
+    // Explorer was killed to release the file; bring the desktop back before asking,
+    // otherwise the user has no taskbar to find and close the program holding it.
+    RelaunchExplorerIfNeeded();
+    Holders := GetLockingPrograms();
+    Text := 'Setup cannot replace ' + FileName + ' because another program is using it.' + #13#10#13#10;
+    if Holders <> '' then
+      Text := Text + 'Programs using it:' + #13#10 + Holders + #13#10 +
+              'Close them, then click Yes to retry.'
+    else
+      Text := Text + 'Close programs that open or browse XISF/FITS files (for example PixInsight, ' +
+              'Flameshot, other image editors or file managers), then click Yes to retry.';
+    Text := Text + #13#10#13#10 +
+      'Yes: retry after closing the programs' + #13#10 +
+      'No: finish the update when Windows restarts' + #13#10 +
+      'Cancel: abort Setup';
+    Answer := SuppressibleMsgBox(Text, mbError, MB_YESNOCANCEL, IDCANCEL);
+    if Answer = IDNO then
+      exit; // restartreplace schedules the locked files for the next restart
+    if Answer <> IDYES then
+      Abort;
+    // The restarted Explorer may have re-opened the file; release it again before retrying.
+    KillExplorerAndLockingProcesses();
   end;
 end;
 
