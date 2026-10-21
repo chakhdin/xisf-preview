@@ -71,3 +71,6 @@ dotnet build -c Release
 
 # 2. Compile the installer
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+
+# 3. SHA-256 of the installer (publish it in the release notes)
+Get-FileHash bin\Installer\XisfFastViewerSetup.exe -Algorithm SHA256

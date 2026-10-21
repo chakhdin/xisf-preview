@@ -22,6 +22,10 @@ namespace XisfExplorerPreview
         // shell/COM host rather than just this call).
         private const int MaxDimension = 65535;
         private const long MaxTotalPixels = 300_000_000L;
+        private const int MaxHeaderBlocks = 2000; // 2000 x 2880 B, about 5.5 MB
+
+        // Largest byte[] the CLR will allocate (without gcAllowVeryLargeObjects).
+        private const long MaxArrayBytes = 0x7FFFFFC7L;
 
         private static bool TryGetSeekableLength(Stream stream, out long length)
         {
@@ -81,9 +85,14 @@ namespace XisfExplorerPreview
                 Dictionary<string, string> header = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 byte[] block = new byte[2880];
                 bool endFound = false;
+                int headerBlocks = 0;
 
                 while (!endFound)
                 {
+                    // Real headers are a handful of blocks; without a cap a file lacking END
+                    // (or full of unique keywords) would be read and indexed end to end.
+                    if (++headerBlocks > MaxHeaderBlocks) return null;
+
                     int bytesRead = 0;
                     while (bytesRead < 2880)
                     {
@@ -188,6 +197,13 @@ namespace XisfExplorerPreview
                 }
                 else
                 {
+                    if (totalDataBytes > MaxArrayBytes) return null;
+
+                    // Don't allocate the buffer for data the file cannot contain.
+                    if (TryGetSeekableLength(stream, out long fullLength) &&
+                        fullLength < stream.Position + totalDataBytes)
+                        return null;
+
                     rawBytes = new byte[totalDataBytes];
                     int totalRead = 0;
                     while (totalRead < totalDataBytes)

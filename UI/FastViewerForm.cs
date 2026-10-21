@@ -174,8 +174,7 @@ namespace XisfExplorerPreview
         private void ApplyPreparedView(PreparedView view)
         {
             _currentFrame = view.Frame;
-            var old = _displayBitmap;
-            _displayBitmap = view.RenderedBitmap;
+            SetDisplayBitmap(view.RenderedBitmap);
 
             _histPanel.SetHistogram(_currentFrame.Histogram, _currentFrame.Median, _currentFrame.MAD);
             _histPanel.Shadows = _currentFrame.AutoShadows;
@@ -186,6 +185,31 @@ namespace XisfExplorerPreview
             FitToScreen();
             UpdateTitle();
             Invalidate();
+        }
+
+        // The cache owns the bitmaps it holds (it disposes them on eviction), so a bitmap
+        // that is also in the cache must not be disposed when the display moves off it.
+        private void SetDisplayBitmap(Bitmap bmp)
+        {
+            var old = _displayBitmap;
+            _displayBitmap = bmp;
+            if (old != null && !ReferenceEquals(old, bmp) &&
+                !_cache.Values.Any(v => ReferenceEquals(v.RenderedBitmap, old)))
+            {
+                old.Dispose();
+            }
+        }
+
+        private void EvictExcept(params string[] keep)
+        {
+            foreach (var key in _cache.Keys.ToList())
+            {
+                if (!keep.Any(k => key.Equals(k, StringComparison.OrdinalIgnoreCase)) &&
+                    _cache.TryRemove(key, out PreparedView removed))
+                {
+                    removed.RenderedBitmap?.Dispose();
+                }
+            }
         }
 
         private void SchedulePreload()
@@ -202,9 +226,15 @@ namespace XisfExplorerPreview
             string nextPath = _folderFiles[nextIdx];
             string prevPath = _folderFiles[prevIdx];
 
+            string currentPath = _currentFilePath;
+
             Task.Run(() =>
             {
                 if (token.IsCancellationRequested) return;
+
+                // Frames can be hundreds of MB: drop everything but current/next/previous
+                // before loading more, so the cache never holds more than three.
+                EvictExcept(currentPath, nextPath, prevPath);
 
                 if (!_cache.ContainsKey(nextPath))
                 {
@@ -220,21 +250,6 @@ namespace XisfExplorerPreview
                     if (pv != null && !token.IsCancellationRequested) _cache[prevPath] = pv;
                 }
 
-                if (_cache.Count > 5)
-                {
-                    foreach (var key in _cache.Keys.ToList())
-                    {
-                        if (!key.Equals(_currentFilePath, StringComparison.OrdinalIgnoreCase) &&
-                            !key.Equals(nextPath, StringComparison.OrdinalIgnoreCase) &&
-                            !key.Equals(prevPath, StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (_cache.TryRemove(key, out PreparedView removed))
-                            {
-                                removed.RenderedBitmap?.Dispose();
-                            }
-                        }
-                    }
-                }
             }, token);
         }
 
@@ -247,9 +262,7 @@ namespace XisfExplorerPreview
             _histPanel.Highlights = _currentFrame.AutoHighlights;
             _histPanel.Invalidate();
 
-            var oldBmp = _displayBitmap;
-            _displayBitmap = StfEngine.RenderAutoStretch(_currentFrame, 1);
-            oldBmp?.Dispose();
+            SetDisplayBitmap(StfEngine.RenderAutoStretch(_currentFrame, 1));
 
             UpdateTitle();
             Invalidate();
@@ -262,9 +275,7 @@ namespace XisfExplorerPreview
             _histPanel.Highlights = 1.0f;
             _histPanel.Invalidate();
 
-            var oldBmp = _displayBitmap;
-            _displayBitmap = StfEngine.RenderBitmapFromRaw(_currentFrame, 0.0f, 0.5f, 1.0f, 1);
-            oldBmp?.Dispose();
+            SetDisplayBitmap(StfEngine.RenderBitmapFromRaw(_currentFrame, 0.0f, 0.5f, 1.0f, 1));
 
             UpdateTitle();
             Invalidate();
@@ -275,9 +286,7 @@ namespace XisfExplorerPreview
             if (_currentFrame == null) return;
 
             int step = (_currentFrame.Width > 2000 || _currentFrame.Height > 2000) ? 4 : 2;
-            var oldBmp = _displayBitmap;
-            _displayBitmap = StfEngine.RenderBitmapFromRaw(_currentFrame, _histPanel.Shadows, _histPanel.Midtones, _histPanel.Highlights, step);
-            oldBmp?.Dispose();
+            SetDisplayBitmap(StfEngine.RenderBitmapFromRaw(_currentFrame, _histPanel.Shadows, _histPanel.Midtones, _histPanel.Highlights, step));
 
             Invalidate();
         }
@@ -286,9 +295,7 @@ namespace XisfExplorerPreview
         {
             if (_currentFrame == null) return;
 
-            var oldBmp = _displayBitmap;
-            _displayBitmap = StfEngine.RenderBitmapFromRaw(_currentFrame, _histPanel.Shadows, _histPanel.Midtones, _histPanel.Highlights, 1);
-            oldBmp?.Dispose();
+            SetDisplayBitmap(StfEngine.RenderBitmapFromRaw(_currentFrame, _histPanel.Shadows, _histPanel.Midtones, _histPanel.Highlights, 1));
 
             UpdateTitle();
             Invalidate();
