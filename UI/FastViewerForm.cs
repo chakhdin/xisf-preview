@@ -150,6 +150,10 @@ namespace XisfExplorerPreview
             }
             else
             {
+                // Do not keep showing (or titling) the previous image under the failed file's name.
+                _currentFrame = null;
+                SetDisplayBitmap(null);
+                Invalidate();
                 Text = $"Failed to load: {Path.GetFileName(filePath)}";
             }
         }
