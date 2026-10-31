@@ -32,6 +32,8 @@ A high-performance Windows Shell extension and lightweight viewer for astronomic
 | **FITS** | `.fits`, `.fit`, `.fts` | 8-bit UInt, 16-bit Int/UInt (BZERO/BSCALE), 32-bit Int, -32 IEEE Float |
 | **FITS (tile-compressed)** | `.fits`, `.fit`, `.fts` | RICE_1, 32-bit integer, one row per tile, lossless (e.g. HOPS output) |
 
+Tile-compressed FITS frames above 16 megapixels are not decoded: no preview or thumbnail is produced for them.
+
 ---
 
 ## Installation
