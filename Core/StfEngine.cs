@@ -232,8 +232,8 @@ namespace XisfExplorerPreview
             StfParams stfG = new StfParams(shadows[1], midtones[1], highlights[1]);
             StfParams stfB = new StfParams(shadows[2], midtones[2], highlights[2]);
 
-            int outWidth = frame.Width / renderStep;
-            int outHeight = frame.Height / renderStep;
+            int outWidth = Math.Max(1, frame.Width / renderStep);
+            int outHeight = Math.Max(1, frame.Height / renderStep);
 
             Bitmap bmp = new Bitmap(outWidth, outHeight, PixelFormat.Format24bppRgb);
             BitmapData bmpData = bmp.LockBits(new Rectangle(0, 0, outWidth, outHeight), ImageLockMode.WriteOnly, bmp.PixelFormat);
@@ -280,8 +280,8 @@ namespace XisfExplorerPreview
         {
             StfParams stf = new StfParams(shadows, midtones, highlights);
 
-            int outWidth = frame.Width / renderStep;
-            int outHeight = frame.Height / renderStep;
+            int outWidth = Math.Max(1, frame.Width / renderStep);
+            int outHeight = Math.Max(1, frame.Height / renderStep);
 
             Bitmap bmp = new Bitmap(outWidth, outHeight, PixelFormat.Format24bppRgb);
             BitmapData bmpData = bmp.LockBits(new Rectangle(0, 0, outWidth, outHeight), ImageLockMode.WriteOnly, bmp.PixelFormat);
