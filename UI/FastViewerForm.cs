@@ -431,8 +431,9 @@ namespace XisfExplorerPreview
         // before KeyDown is raised, so Left/Right are handled here instead.
         protected override bool ProcessDialogKey(Keys keyData)
         {
-            if (keyData == Keys.Right) { Navigate(1); return true; }
-            if (keyData == Keys.Left) { Navigate(-1); return true; }
+            Keys key = keyData & Keys.KeyCode;
+            if (key == Keys.Right) { Navigate(1); return true; }
+            if (key == Keys.Left) { Navigate(-1); return true; }
             return base.ProcessDialogKey(keyData);
         }
 
