@@ -27,6 +27,41 @@ namespace XisfExplorerPreview
         // Largest byte[] the CLR will allocate (without gcAllowVeryLargeObjects).
         private const long MaxArrayBytes = 0x7FFFFFC7L;
 
+        // Float data is nominally 0..1, but many writers store ADU (0..255 or 0..65535) or other
+        // unbounded values. When the finite maximum exceeds 1, divide by 255 / 65535 for the common
+        // 8/16-bit ranges, otherwise by the maximum. One scale for all channels, so colour balance
+        // survives. Never triggers on negative values: those just clamp to 0. Runs on the samples
+        // that survived subsampling, so seekable and forward-only reads agree.
+        private static void NormalizeFloatRange(float[] data)
+        {
+            object gate = new object();
+            float max = 0.0f;
+            Parallel.For(0, (data.Length + 65535) / 65536, () => 0.0f, (chunk, state, local) =>
+            {
+                int end = Math.Min(data.Length, (chunk + 1) * 65536);
+                for (int i = chunk * 65536; i < end; i++)
+                {
+                    float v = data[i];
+                    if (!float.IsInfinity(v) && v > local) local = v;
+                }
+                return local;
+            }, local => { lock (gate) { if (local > max) max = local; } });
+
+            double scale = 1.0;
+            if (max > 1.0f)
+                scale = max <= 255.0f ? 255.0 : (max <= 65535.0f ? 65535.0 : max);
+
+            Parallel.For(0, (data.Length + 65535) / 65536, chunk =>
+            {
+                int end = Math.Min(data.Length, (chunk + 1) * 65536);
+                for (int i = chunk * 65536; i < end; i++)
+                {
+                    double n = scale == 1.0 ? data[i] : data[i] / scale;
+                    data[i] = n <= 0.0 ? 0.0f : (n >= 1.0 ? 1.0f : (float)n);
+                }
+            });
+        }
+
         private static bool TryGetSeekableLength(Stream stream, out long length)
         {
             length = 0;
@@ -264,7 +299,12 @@ namespace XisfExplorerPreview
                                 {
                                     uint u = (uint)((ptr[0] << 24) | (ptr[1] << 16) | (ptr[2] << 8) | ptr[3]);
                                     float f = *(float*)&u;
-                                    norm = float.IsNaN(f) || f < 0.0f ? 0.0f : (f > 1.0f ? 1.0f : f);
+                                    // Stored unclamped; NormalizeFloatRange scales and clamps it once the
+                                    // whole frame is known.
+                                    float scaled = (float)(f * bscale + bzero);
+                                    pNormLocal[((dstRowOffset + x) * activeChannels) + currentChannel] =
+                                        float.IsNaN(scaled) ? 0.0f : scaled;
+                                    continue;
                                 }
                                 else if (bitpix == 8)
                                 {
@@ -284,6 +324,8 @@ namespace XisfExplorerPreview
                         });
                     }
                 }
+
+                if (bitpix == -32) NormalizeFloatRange(frame.NormalizedData);
 
                 for (int i = 0; i < outWidth * outHeight; i++)
                 {
