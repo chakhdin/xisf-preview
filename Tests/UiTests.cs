@@ -375,8 +375,9 @@ namespace XisfPreview.Tests
                 using (Bitmap bmp = Paint(c))
                 {
                     int stray = 0;
+                    // Stop before the title bar buttons: their text is close to the curve colour.
                     for (int y = 0; y < 44; y++)
-                        for (int x = 0; x < bmp.Width; x++)
+                        for (int x = 0; x < bmp.Width - 190; x++)
                         {
                             Color p = bmp.GetPixel(x, y);
                             if (Math.Abs(p.R - CurveColor.R) < 12 && Math.Abs(p.G - CurveColor.G) < 12 && Math.Abs(p.B - CurveColor.B) < 12)

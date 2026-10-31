@@ -142,6 +142,7 @@ namespace XisfExplorerPreview
                     float px = _chartArea.Left + (i / 255.0f * _chartArea.Width);
                     double logVal = Math.Log(1 + _histogram[i]);
                     float normHeight = (float)(logVal / logMax);
+                    if (normHeight > 1.0f) normHeight = 1.0f; // clipped end bins are excluded from _maxVal and may exceed it
                     float py = _chartArea.Bottom - (normHeight * (_chartArea.Height - 5));
                     points[i] = new PointF(px, py);
                 }
