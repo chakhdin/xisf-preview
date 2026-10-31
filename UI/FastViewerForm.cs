@@ -427,17 +427,26 @@ namespace XisfExplorerPreview
             Cursor = Cursors.Default;
         }
 
+        // Arrow keys are consumed by dialog navigation (focus moves between child controls)
+        // before KeyDown is raised, so Left/Right are handled here instead.
+        protected override bool ProcessDialogKey(Keys keyData)
+        {
+            if (keyData == Keys.Right) { Navigate(1); return true; }
+            if (keyData == Keys.Left) { Navigate(-1); return true; }
+            return base.ProcessDialogKey(keyData);
+        }
+
         protected override void OnKeyDown(KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Escape)
             {
                 Close();
             }
-            else if (e.KeyCode == Keys.PageDown || e.KeyCode == Keys.Right)
+            else if (e.KeyCode == Keys.PageDown)
             {
                 Navigate(1);
             }
-            else if (e.KeyCode == Keys.PageUp || e.KeyCode == Keys.Left)
+            else if (e.KeyCode == Keys.PageUp)
             {
                 Navigate(-1);
             }
