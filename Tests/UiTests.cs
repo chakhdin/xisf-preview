@@ -358,6 +358,70 @@ namespace XisfPreview.Tests
             }
         });
 
+        // The per-channel auto stretch renders each channel on its own, so the Median and MAD rows
+        // must describe the channels too, and must not outlive the stretch or the image.
+        [Fact]
+        public void RgbAutoStretch_ShowsPerChannelMedianAndMad_UntilTheStretchOrImageChanges() => Sta.Run(() =>
+        {
+            using (var v = new ViewerHarness())
+            {
+                var rnd = new Random(2);
+                byte[] data = Fits.Be16(Enumerable.Range(0, 64 * 48 * 3).Select(i =>
+                {
+                    int plane = i / (64 * 48);
+                    return (short)(new[] { 500, 1500, 4000 }[plane] + rnd.Next(-30, 30) - 32768);
+                }));
+                string rgb = v.Add("a-rgb.fits", Fits.File(16, 64, 48, 3, data, Fits.Card("BZERO", "32768")));
+                v.Add("b-mono.fits", Sample(500));
+                v.Add("c-corrupt.fits", new byte[100]);
+                v.Open(rgb);
+                var hist = v.Field<HistogramControl>("_histPanel");
+                var frame = v.Field<XisfRawFrame>("_currentFrame");
+
+                // Per channel values, not the pooled ones: the red and blue levels are far from the pooled median.
+                Assert.NotNull(frame.MedianPerChannel);
+                Assert.Equal(frame.MedianPerChannel, hist.ChannelMedian);
+                Assert.Equal(frame.MADPerChannel, hist.ChannelMAD);
+                Assert.True(hist.ChannelMedian[0] < frame.Median / 2f && hist.ChannelMedian[2] > frame.Median * 2f);
+
+                // Reset is a linked stretch: back to the pooled values.
+                v.Call("ResetStretch");
+                Assert.Null(hist.ChannelMedian);
+                Assert.Null(hist.ChannelMAD);
+                Assert.Equal(frame.Median, hist.StatMedian);
+
+                // Auto stretch brings the per channel values back.
+                v.Call("TriggerAutoStf");
+                Assert.NotNull(hist.ChannelMedian);
+                Assert.Equal(frame.MedianPerChannel, hist.ChannelMedian);
+                Assert.Equal(frame.MADPerChannel, hist.ChannelMAD);
+
+                // A mono image has no per channel values to keep.
+                v.Press(Keys.PageDown);
+                var mono = v.Field<XisfRawFrame>("_currentFrame");
+                Assert.Contains("b-mono.fits", v.Form.Text);
+                Assert.Null(hist.ChannelMedian);
+                Assert.Null(hist.ChannelMAD);
+                Assert.Equal(mono.Median, hist.StatMedian);
+                Assert.Equal(mono.MAD, hist.StatMAD);
+
+                // A failed load clears the image, so the statistics go too.
+                v.Press(Keys.PageDown);
+                Assert.Contains("Failed to load: c-corrupt.fits", v.Form.Text);
+                Assert.Null(hist.ChannelMedian);
+                Assert.Null(hist.ChannelMAD);
+                Assert.Null(hist.ChannelShadows);
+                Assert.Null(hist.ModeLabel);
+                Assert.Equal(0f, hist.StatMedian);
+                Assert.Equal(0f, hist.StatMAD);
+
+                // Back on the RGB file the per channel values return.
+                v.Press(Keys.PageDown);
+                Assert.Contains("a-rgb.fits", v.Form.Text);
+                Assert.NotNull(hist.ChannelMedian);
+            }
+        });
+
         // Preloader races: rapid navigation must never paint a disposed bitmap.
         [Fact]
         public void RapidNavigation_NeverPaintsDisposedBitmap() => Sta.Run(() =>
@@ -421,6 +485,32 @@ namespace XisfPreview.Tests
                                 stray++;
                         }
                     Assert.True(stray == 0, $"{stray} curve pixels above the chart");
+                }
+            }
+        });
+
+        // The per channel Median and MAD rows are the widest text in the sidebar: three F5 values
+        // must stay inside the panel (the area right of the text column is empty background).
+        [Fact]
+        public void PerChannelMedianAndMad_StayInsideThePanel() => Sta.Run(() =>
+        {
+            using (var c = new HistogramControl())
+            {
+                c.SetHistogram(new int[256], 0.5f, 0.5f);
+                c.ChannelShadows = new[] { 0.05f, 0.05f, 0.05f };
+                c.ChannelMidtones = new[] { 0.5f, 0.5f, 0.5f };
+                c.ChannelHighlights = new[] { 1f, 1f, 1f };
+                c.ChannelMedian = new[] { 0.00000f, 0.83333f, 0.88888f };
+                c.ChannelMAD = new[] { 0.08888f, 0.00000f, 0.88888f };
+                c.ModeLabel = "Auto (per channel)";
+                using (Bitmap bmp = Paint(c))
+                {
+                    Color back = c.BackColor;
+                    int stray = 0;
+                    for (int y = 45; y < c.Height - 20; y++)
+                        for (int x = c.Width - 6; x < c.Width - 2; x++)
+                            if (bmp.GetPixel(x, y) != back) stray++;
+                    Assert.True(stray == 0, $"{stray} text pixels at the right edge");
                 }
             }
         });
@@ -535,7 +625,7 @@ namespace XisfPreview.Tests
                 int changing = r.Changing;
                 float mid = r.C.Midtones;
 
-                r.Down(MouseButtons.Right, 380, 10); // Auto stretch button
+                r.Down(MouseButtons.Right, 460, 10); // Auto stretch button
                 r.Move(MouseButtons.Left, 300, 170);
 
                 Assert.Equal(1, r.Auto);
