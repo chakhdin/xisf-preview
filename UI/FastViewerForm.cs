@@ -52,6 +52,8 @@ namespace XisfExplorerPreview
 
             if (!string.IsNullOrEmpty(initialFilePath) && File.Exists(initialFilePath))
             {
+                // A bare file name has no directory part: resolve it so folder navigation works.
+                initialFilePath = Path.GetFullPath(initialFilePath);
                 LoadFolder(initialFilePath);
                 OpenFile(initialFilePath);
             }
