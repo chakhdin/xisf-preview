@@ -201,7 +201,6 @@ namespace XisfExplorerPreview
         {
             if (x <= 0.0f) return 0.0f;
             if (x >= 1.0f) return 1.0f;
-            if (Math.Abs(x - 0.5f) < 1e-6f) return m;
 
             float den = ((2.0f * m - 1.0f) * x) - m;
             if (Math.Abs(den) < 1e-8f) return 0.0f;
