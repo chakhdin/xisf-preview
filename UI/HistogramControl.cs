@@ -14,6 +14,13 @@ namespace XisfExplorerPreview
         public float Midtones { get; set; } = 0.5f;
         public float Highlights { get; set; } = 1.0f;
 
+        // Per-channel auto-stretch values (R, G, B), set while the image shows the unlinked auto
+        // stretch. Null once the user drags a slider: the stretch is then linked (see Shadows etc.).
+        public float[] ChannelShadows { get; set; }
+        public float[] ChannelMidtones { get; set; }
+        public float[] ChannelHighlights { get; set; }
+        public string ModeLabel { get; set; }
+
         public float StatMedian { get; set; }
         public float StatMAD { get; set; }
 
@@ -25,6 +32,7 @@ namespace XisfExplorerPreview
 
         private enum DragMode { None, Window, Shadows, Midtones, Highlights }
         private DragMode _activeDrag = DragMode.None;
+        private bool _dragMoved; // a press and release without movement must not change the stretch
         private Point _dragStartMouse;
         private Point _dragStartLocation;
 
@@ -55,6 +63,24 @@ namespace XisfExplorerPreview
             }
             StatMedian = med;
             StatMAD = mad;
+            Invalidate();
+        }
+
+        // Shows the values the automatic stretch renders with: per channel for RGB (same condition
+        // as StfEngine.RenderAutoStretch), otherwise the single linked/mono triple.
+        public void SetAutoStretch(XisfRawFrame frame)
+        {
+            Shadows = frame.AutoShadows;
+            Midtones = frame.AutoMidtones;
+            Highlights = frame.AutoHighlights;
+
+            bool perChannel = frame.Channels >= 3 &&
+                frame.AutoShadowsPerChannel != null && frame.AutoShadowsPerChannel.Length >= 3 &&
+                frame.AutoMidtonesPerChannel != null && frame.AutoHighlightsPerChannel != null;
+            ChannelShadows = perChannel ? frame.AutoShadowsPerChannel : null;
+            ChannelMidtones = perChannel ? frame.AutoMidtonesPerChannel : null;
+            ChannelHighlights = perChannel ? frame.AutoHighlightsPerChannel : null;
+            ModeLabel = perChannel ? "Auto (per channel)" : null;
             Invalidate();
         }
 
@@ -146,12 +172,24 @@ namespace XisfExplorerPreview
             int statX = 370;
             int statY = 50;
             Font statFont = new Font("Segoe UI", 8.5f);
-            DrawStatRow(g, "Shadows:", $"{Shadows:F4}", statX, ref statY, statFont);
-            DrawStatRow(g, "Midtones:", $"{Midtones:F4}", statX, ref statY, statFont);
-            DrawStatRow(g, "Highlights:", $"{Highlights:F4}", statX, ref statY, statFont);
+            if (!string.IsNullOrEmpty(ModeLabel))
+            {
+                TextRenderer.DrawText(g, ModeLabel, statFont, new Point(statX, statY), Color.FromArgb(140, 190, 255));
+                statY += 18;
+            }
+            DrawStatRow(g, "Shadows:", StatValue(ChannelShadows, Shadows), statX, ref statY, statFont);
+            DrawStatRow(g, "Midtones:", StatValue(ChannelMidtones, Midtones), statX, ref statY, statFont);
+            DrawStatRow(g, "Highlights:", StatValue(ChannelHighlights, Highlights), statX, ref statY, statFont);
             statY += 10;
             DrawStatRow(g, "Median:", $"{StatMedian:F5}", statX, ref statY, statFont);
             DrawStatRow(g, "MAD:", $"{StatMAD:F5}", statX, ref statY, statFont);
+        }
+
+        // R/G/B triple while the per-channel auto stretch is shown, the single linked value otherwise.
+        private static string StatValue(float[] perChannel, float linked)
+        {
+            if (perChannel == null || perChannel.Length < 3) return $"{linked:F4}";
+            return $"{perChannel[0]:F3} {perChannel[1]:F3} {perChannel[2]:F3}";
         }
 
         private void DrawButton(Graphics g, Rectangle r, string text, Color bg)
@@ -196,6 +234,7 @@ namespace XisfExplorerPreview
                 return;
             }
 
+            _dragMoved = false;
             int sx = _chartArea.Left + (int)(Shadows * _chartArea.Width);
             int mx = _chartArea.Left + (int)(Midtones * _chartArea.Width);
             int hx = _chartArea.Left + (int)(Highlights * _chartArea.Width);
@@ -225,9 +264,17 @@ namespace XisfExplorerPreview
             }
 
             if (_activeDrag == DragMode.None || _chartArea.Width <= 0) return;
+            _dragMoved = true;
 
             float norm = (float)(e.X - _chartArea.Left) / _chartArea.Width;
             norm = Math.Max(0.0f, Math.Min(1.0f, norm));
+
+            // Manual editing is a single linked stretch: leave the per-channel auto display.
+            if (ChannelShadows != null)
+            {
+                ChannelShadows = ChannelMidtones = ChannelHighlights = null;
+                ModeLabel = "Linked (manual)";
+            }
 
             if (_activeDrag == DragMode.Shadows)
             {
@@ -248,11 +295,12 @@ namespace XisfExplorerPreview
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
-            if (_activeDrag != DragMode.None && _activeDrag != DragMode.Window)
+            if (_activeDrag != DragMode.None && _activeDrag != DragMode.Window && _dragMoved)
             {
                 ValuesChanged?.Invoke(this, EventArgs.Empty);
             }
             _activeDrag = DragMode.None;
+            _dragMoved = false;
         }
     }
 }

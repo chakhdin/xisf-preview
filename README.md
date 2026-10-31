@@ -14,7 +14,7 @@ A high-performance Windows Shell extension and lightweight viewer for astronomic
 
 - **Windows Explorer Thumbnails**: Native `IThumbnailProvider` shell extension providing fast, high-quality thumbnails directly in File Explorer.
 - **Windows Preview Pane**: Native `IPreviewHandler` integration to view full uncompressed images in the Explorer preview pane (`Alt + P`).
-- **PixInsight-Compliant Linked AutoSTF**: Implements PixInsight's standard linked Screen Transfer Function (Eq. 8.5.7) using joint channel median and MAD statistics to eliminate color casts on linear frames.
+- **PixInsight-Compliant AutoSTF**: Implements PixInsight's Screen Transfer Function auto-stretch (spec section 8.5.7) using median and MAD statistics. RGB images are stretched per channel (unlinked), which neutralizes color casts on linear frames; the viewer's histogram panel shows the R/G/B values ("Auto (per channel)") and switches to a linked stretch as soon as you drag a slider.
 - **High-Performance I/O Engine**: Memory-mapped bulk reads and parallelized decoding for fast loading of multi-megapixel CCD/CMOS raw frames.
 - **Standalone FastViewer**:
   - Auto-fits window dimensions on launch.
@@ -52,7 +52,7 @@ Tile-compressed FITS frames above 16 megapixels are not decoded: no preview or t
 |---|---|
 | `PageDown` / `Right Arrow` | Next astronomical image in folder |
 | `PageUp` / `Left Arrow` | Previous astronomical image in folder |
-| `Space` | Re-apply linked PixInsight AutoSTF |
+| `Space` | Re-apply PixInsight AutoSTF (per channel on RGB) |
 | `F` | Fit image to window |
 | `H` | Toggle Histogram / STF HUD panel |
 | `Mouse Wheel` | Smooth zoom centered on cursor |
