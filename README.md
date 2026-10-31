@@ -66,6 +66,7 @@ Tile-compressed FITS frames above 16 megapixels are not decoded: no preview or t
 ### Prerequisites
 - [.NET Framework 4.8 Developer Pack / SDK](https://dotnet.microsoft.com/download/dotnet-framework/net48)
 - [Inno Setup 6](https://jrsoftware.org/isdl.php)
+- A strong-name key file `key.snk` in the repository root. It is gitignored, so a fresh clone does not contain it and the build fails with a missing-key error. Generate your own with `sn -k key.snk` from a Developer Command Prompt (the .NET Framework SDK tool); the key only gives the assembly a strong name and is not tied to anything else in the repository.
 
 ### Compilation
 ```powershell
