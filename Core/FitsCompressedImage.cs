@@ -104,6 +104,8 @@ namespace XisfExplorerPreview
             bool hasBzero = h.ContainsKey("BZERO");
             if (hasBzero && !double.TryParse(h["BZERO"], NumberStyles.Float, CultureInfo.InvariantCulture, out bzero)) return null;
             if (h.ContainsKey("BSCALE") && !double.TryParse(h["BSCALE"], NumberStyles.Float, CultureInfo.InvariantCulture, out bscale)) return null;
+            // TryParse accepts "NaN" and "Infinity"; with finite values the pixel formula cannot yield NaN.
+            if (double.IsNaN(bzero) || double.IsInfinity(bzero) || double.IsNaN(bscale) || double.IsInfinity(bscale)) return null;
 
             long tableStart = stream.Position;
             long heapStart = tableStart + tableBytes;

@@ -224,6 +224,16 @@ namespace XisfPreview.Tests
             Assert.Null(Load(file));
         }
 
+        [Theory]
+        [InlineData("BSCALE", "NaN")]
+        [InlineData("BSCALE", "Infinity")]
+        [InlineData("BSCALE", "-Infinity")]
+        [InlineData("BZERO", "NaN")]
+        [InlineData("BZERO", "Infinity")]
+        [InlineData("BZERO", "-Infinity")]
+        public void NonFiniteScaling_ReturnsNull(string key, string value) =>
+            Assert.Null(Load(RiceFits.File(8, 2, Ramp(8, 2), With(key, value))));
+
         [Fact]
         public void TruncatedFile_ReturnsNull()
         {
