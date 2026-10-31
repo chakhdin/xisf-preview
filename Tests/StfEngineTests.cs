@@ -129,6 +129,34 @@ namespace XisfPreview.Tests
             Assert.True(f.AutoStfSkipped);
         }
 
+        // Mostly-empty frame (median 0, e.g. sparse speckle on black): the midtone is solved on
+        // the non-zero samples, so the speckle is brightened instead of left near black.
+        [Theory]
+        [InlineData(1)]
+        [InlineData(3)]
+        public void AutoStf_MedianZero_BrightensNonZeroSamples(int channels)
+        {
+            var rnd = new Random(3);
+            XisfRawFrame f = Frame(128, 128, channels, (i, c) => i % 20 == 0 ? 0.002f + (float)rnd.NextDouble() * 0.002f : 0f);
+            StfEngine.ComputeAutoStf(f, false);
+
+            Assert.False(f.AutoStfSkipped);
+            Assert.True(f.AutoMidtones < 0.5f);
+            if (channels == 3)
+                Assert.All(f.AutoMidtonesPerChannel, m => Assert.True(m < 0.5f));
+            using (Bitmap bmp = StfEngine.RenderAutoStretch(f))
+                Assert.True(Pixels.Rgb(bmp).Max() > 40); // without the fallback the 0.002..0.004 speckle renders near black
+        }
+
+        // A non-zero median at or above the target background never gets darker.
+        [Fact]
+        public void AutoStf_MedianZero_NonZeroMedianAboveTarget_KeepsDefaultMidtone()
+        {
+            XisfRawFrame f = Frame(100, 100, 1, (i, c) => i % 20 == 0 ? 0.3f : 0f);
+            StfEngine.ComputeAutoStf(f, false);
+            Assert.Equal(0.5f, f.AutoMidtones);
+        }
+
         [Fact]
         public void AutoStf_ThumbnailIsIdentity()
         {

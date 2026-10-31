@@ -83,6 +83,8 @@ namespace XisfExplorerPreview
                     m = Math.Max(0.0001f, Math.Min(0.9999f, m));
                 }
 
+                if (x <= 0.000001f) m = SparseMidtones(samples, idx, m);
+
                 shadows[c] = c0;
                 midtones[c] = m;
                 highlights[c] = 1.0f;
@@ -91,6 +93,20 @@ namespace XisfExplorerPreview
             frame.AutoShadowsPerChannel = shadows;
             frame.AutoMidtonesPerChannel = midtones;
             frame.AutoHighlightsPerChannel = highlights;
+        }
+
+        // Median 0 (mostly-empty frame): solve the midtone on the non-zero samples instead. sorted
+        // must be ascending. Only ever brightens: a non-zero median at or above the target
+        // keeps the default.
+        private static float SparseMidtones(float[] sorted, int count, float fallback)
+        {
+            int first = Array.BinarySearch(sorted, 0, count, float.Epsilon);
+            if (first < 0) first = ~first;
+            if (first >= count) return fallback;
+            float x = sorted[first + ((count - first) / 2)];
+            const float B = 0.25f;
+            if (x >= B) return fallback;
+            return Math.Max(0.0001f, x * (1.0f - B) / ((x * (1.0f - 2.0f * B)) + B));
         }
 
         public static void ComputeLinkedAutoStf(XisfRawFrame frame, bool isThumbnail)
@@ -173,6 +189,8 @@ namespace XisfExplorerPreview
                 }
                 m = Math.Max(0.0001f, Math.Min(0.9999f, m));
             }
+
+            if (x <= 0.000001f) m = SparseMidtones(pooledSamples, idx, m);
 
             frame.AutoShadows = c0;
             frame.AutoMidtones = m;
