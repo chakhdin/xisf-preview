@@ -208,7 +208,8 @@ namespace XisfExplorerPreview
                 }
                 else if (location.StartsWith("inline:base64"))
                 {
-                    pixelData = Convert.FromBase64String(imgElem.Value.Trim());
+                    // Only direct text nodes: Property/FITSKeyword children carry text that is not pixel data
+                    pixelData = Convert.FromBase64String(string.Concat(imgElem.Nodes().OfType<XText>().Select(t => t.Value)).Trim());
                 }
                 else if (location == "embedded")
                 {
