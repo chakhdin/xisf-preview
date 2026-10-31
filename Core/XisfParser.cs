@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -125,6 +126,18 @@ namespace XisfExplorerPreview
                 string pixelStorage = imgElem.Attribute("pixelStorage")?.Value ?? "Planar";
                 string compression = imgElem.Attribute("compression")?.Value;
 
+                // Float32 bounds attribute "lower:upper" (default 0:1); samples are rescaled by it
+                float lowerBound = 0.0f, upperBound = 1.0f;
+                string[] boundParts = imgElem.Attribute("bounds")?.Value?.Split(':');
+                if (boundParts != null && boundParts.Length == 2 &&
+                    float.TryParse(boundParts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float lo) &&
+                    float.TryParse(boundParts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float hi) &&
+                    hi > lo)
+                {
+                    lowerBound = lo;
+                    upperBound = hi;
+                }
+
                 if (string.IsNullOrEmpty(geometry) || string.IsNullOrEmpty(location) || !string.IsNullOrEmpty(compression))
                     return null;
 
@@ -207,7 +220,7 @@ namespace XisfExplorerPreview
                 long requiredBytes = (long)srcWidth * srcHeight * channels * bytesPerSample;
                 if (pixelData.LongLength < requiredBytes) return null;
 
-                XisfRawFrame result = ProcessRawBuffer(srcWidth, srcHeight, channels, sampleFormat, pixelStorage, pixelData, isThumbnail, targetDimension);
+                XisfRawFrame result = ProcessRawBuffer(srcWidth, srcHeight, channels, sampleFormat, pixelStorage, pixelData, isThumbnail, targetDimension, lowerBound, upperBound);
                 StfEngine.ComputeAutoStf(result, isThumbnail);
                 return result;
             }
@@ -276,7 +289,7 @@ namespace XisfExplorerPreview
             return result;
         }
 
-        private static unsafe XisfRawFrame ProcessRawBuffer(int srcWidth, int srcHeight, int channels, string sampleFormat, string pixelStorage, byte[] pixelData, bool isThumbnail, int targetDimension)
+        private static unsafe XisfRawFrame ProcessRawBuffer(int srcWidth, int srcHeight, int channels, string sampleFormat, string pixelStorage, byte[] pixelData, bool isThumbnail, int targetDimension, float lowerBound, float upperBound)
         {
             int step = 1;
             if (targetDimension > 0 && (srcWidth > targetDimension || srcHeight > targetDimension))
@@ -322,7 +335,7 @@ namespace XisfExplorerPreview
                                 byteOffset = ((pixelOffset * channels) + c) * bytesPerSample;
                             }
 
-                            float val = ReadNorm(pData + byteOffset, sampleFormat);
+                            float val = ReadNorm(pData + byteOffset, sampleFormat, lowerBound, upperBound);
                             pNorm[(dstPixel * channels) + c] = val;
 
                             if (c == 0)
@@ -341,7 +354,7 @@ namespace XisfExplorerPreview
             return frame;
         }
 
-        private static unsafe float ReadNorm(byte* ptr, string format)
+        private static unsafe float ReadNorm(byte* ptr, string format, float lowerBound, float upperBound)
         {
             if (format == "UInt8")
                 return *ptr / 255.0f;
@@ -350,7 +363,9 @@ namespace XisfExplorerPreview
             if (format == "Float32")
             {
                 float f = *(float*)ptr;
-                return float.IsNaN(f) || f < 0.0f ? 0.0f : (f > 1.0f ? 1.0f : f);
+                if (float.IsNaN(f)) return 0.0f;
+                f = (f - lowerBound) / (upperBound - lowerBound);
+                return f < 0.0f ? 0.0f : (f > 1.0f ? 1.0f : f);
             }
             return 0.0f;
         }
