@@ -48,14 +48,6 @@ namespace XisfExplorerPreview
                 Array.Sort(samples, 0, idx);
                 float median = idx > 0 ? samples[idx / 2] : 0.0f;
 
-                if (median >= 0.1f) // Already bright enough; skip stretch
-                {
-                    shadows[c] = 0.0f;
-                    midtones[c] = 0.5f;
-                    highlights[c] = 1.0f;
-                    continue;
-                }
-
                 float[] absDev = new float[idx];
                 for (int i = 0; i < idx; i++)
                     absDev[i] = Math.Abs(samples[i] - median);
@@ -141,10 +133,12 @@ namespace XisfExplorerPreview
             float median = pooledSamples[idx / 2];
             frame.Median = median;
 
-            // Already finished: either bright overall, or a large share of pixels is bright
-            // (e.g. a planetary disc on a black sky, where the median alone is ~0).
+            // Already finished: a large share of pixels is bright (e.g. a planetary disc on a
+            // black sky, where the median alone is ~0), or bright overall, or a raised background
+            // with real signal above it. A raised background with a narrow spread is still
+            // linear (e.g. light pollution) and needs the stretch.
             float p99 = pooledSamples[Math.Min(idx - 1, (int)(idx * 0.99f))];
-            if (median >= 0.1f || p99 >= 0.5f)
+            if (p99 >= 0.5f || median >= 0.35f || (median >= 0.1f && p99 - median >= 0.1f))
             {
                 frame.AutoStfSkipped = true;
                 frame.AutoShadows = 0.0f;

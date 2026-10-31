@@ -129,6 +129,51 @@ namespace XisfPreview.Tests
             Assert.True(f.AutoStfSkipped);
         }
 
+        // 80% of the pixels at the median and 20% at p99, so both statistics are exact.
+        [Theory]
+        [InlineData(0.05f, 0.30f, false)] // faint: always stretched
+        [InlineData(0.15f, 0.20f, false)] // high background with a narrow spread: still linear
+        [InlineData(0.20f, 0.25f, false)]
+        [InlineData(0.15f, 0.30f, true)]  // wide spread above the background: already finished
+        [InlineData(0.36f, 0.40f, true)]  // bright overall, whatever the spread
+        public void AutoStf_SkipDependsOnMedianAndSpread(float median, float p99, bool skipped)
+        {
+            XisfRawFrame f = Frame(100, 100, 1, (i, c) => i < 2000 ? p99 : median);
+            StfEngine.ComputeAutoStf(f, false);
+            Assert.Equal(skipped, f.AutoStfSkipped);
+            if (!skipped)
+                Assert.True(f.AutoMidtones < 0.5f);
+        }
+
+        // The case behind the near-blank renders: unstretched data on a high background.
+        [Fact]
+        public void AutoStf_HighLinearBackground_RevealsFaintSignal()
+        {
+            XisfRawFrame f = Frame(100, 100, 1, (i, c) => i % 2 == 0 ? 0.15f : 0.152f);
+            StfEngine.ComputeAutoStf(f, false);
+            using (Bitmap bmp = StfEngine.RenderAutoStretch(f))
+                Assert.True(Math.Abs(bmp.GetPixel(0, 0).R - bmp.GetPixel(1, 0).R) >= 10); // unstretched the two differ by 1
+        }
+
+        [Fact]
+        public void Rgb_HighLinearBackground_GetsPerChannelStretch()
+        {
+            XisfRawFrame f = Noisy(128, 128, 3, new[] { 0.15f, 0.16f, 0.17f }, 0.01f);
+            StfEngine.ComputeAutoStf(f, false);
+            Assert.False(f.AutoStfSkipped);
+            Assert.All(f.AutoShadowsPerChannel, s => Assert.True(s > 0f));
+        }
+
+        // A channel well above the others must not be left out of the per-channel stretch.
+        [Fact]
+        public void Rgb_BrightChannel_IsStretchedLikeTheOthers()
+        {
+            XisfRawFrame f = Noisy(128, 128, 3, new[] { 0.02f, 0.03f, 0.15f }, 0.01f);
+            StfEngine.ComputeAutoStf(f, false);
+            Assert.False(f.AutoStfSkipped);
+            Assert.True(f.AutoShadowsPerChannel[2] > 0.1f);
+        }
+
         // Mostly-empty frame (median 0, e.g. sparse speckle on black): the midtone is solved on
         // the non-zero samples, so the speckle is brightened instead of left near black.
         [Theory]
