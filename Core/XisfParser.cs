@@ -111,7 +111,8 @@ namespace XisfExplorerPreview
                 if (targetDimension > 0 && targetDimension <= 512)
                 {
                     XElement thumbElem = xdoc.Root.Descendants(ns + "Thumbnail").FirstOrDefault();
-                    if (thumbElem != null)
+                    // A thumbnail we cannot decode (compressed) must not cost us the main image.
+                    if (thumbElem != null && string.IsNullOrEmpty(thumbElem.Attribute("compression")?.Value))
                     {
                         imgElem = thumbElem;
                         isThumbnail = true;
