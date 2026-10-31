@@ -31,6 +31,10 @@ namespace XisfExplorerPreview
         public float[] AutoShadowsPerChannel { get; set; }
         public float[] AutoMidtonesPerChannel { get; set; }
         public float[] AutoHighlightsPerChannel { get; set; }
+
+        // Per-channel median and MAD the unlinked STF was solved from (null without an unlinked STF)
+        public float[] MedianPerChannel { get; set; }
+        public float[] MADPerChannel { get; set; }
     }
 
     public static class XisfParser
@@ -243,10 +247,18 @@ namespace XisfExplorerPreview
             }
         }
 
-        private static int ComputeStep(int srcWidth, int srcHeight, int targetDimension)
+        // Subsampling step for a downscaled request. The step follows the shorter side, so an
+        // extreme aspect ratio would leave the long side almost at full size; raise the step until
+        // the longest output side is at most about 4 x targetDimension, but never past the shorter
+        // source side so neither output side becomes 0.
+        public static int ComputeStep(int srcWidth, int srcHeight, int targetDimension)
         {
             if (targetDimension > 0 && (srcWidth > targetDimension || srcHeight > targetDimension))
-                return Math.Max(1, Math.Min(srcWidth / targetDimension, srcHeight / targetDimension));
+            {
+                int step = Math.Max(1, Math.Min(srcWidth / targetDimension, srcHeight / targetDimension));
+                int limited = Math.Max(srcWidth, srcHeight) / (4 * targetDimension);
+                return Math.Min(Math.Max(step, limited), Math.Min(srcWidth, srcHeight));
+            }
             return 1;
         }
 
@@ -303,11 +315,7 @@ namespace XisfExplorerPreview
 
         private static unsafe XisfRawFrame ProcessRawBuffer(int srcWidth, int srcHeight, int channels, string sampleFormat, string pixelStorage, byte[] pixelData, bool isThumbnail, int targetDimension, float lowerBound, float upperBound)
         {
-            int step = 1;
-            if (targetDimension > 0 && (srcWidth > targetDimension || srcHeight > targetDimension))
-            {
-                step = Math.Max(1, Math.Min(srcWidth / targetDimension, srcHeight / targetDimension));
-            }
+            int step = ComputeStep(srcWidth, srcHeight, targetDimension);
 
             int outWidth = srcWidth / step;
             int outHeight = srcHeight / step;

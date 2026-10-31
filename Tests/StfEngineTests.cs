@@ -88,6 +88,61 @@ namespace XisfPreview.Tests
             Assert.True(f.AutoShadows > 0f && f.AutoShadows < f.Median);
         }
 
+        // The per-channel stretch is solved from each channel's own median and MAD, not the pooled ones.
+        [Fact]
+        public void AutoStf_Rgb_KeepsPerChannelMedianAndMad()
+        {
+            XisfRawFrame f = Noisy(256, 256, 3, new[] { 0.002f, 0.01f, 0.05f }, 0.0004f);
+            StfEngine.ComputeAutoStf(f, false);
+
+            float[] median = f.MedianPerChannel;
+            float[] mad = f.MADPerChannel;
+            Assert.Equal(3, median.Length);
+            Assert.Equal(3, mad.Length);
+            Assert.InRange(median[0], 0.0018f, 0.0022f);
+            Assert.InRange(median[1], 0.0098f, 0.0102f);
+            Assert.InRange(median[2], 0.0498f, 0.0502f);
+            Assert.True(median[0] < f.Median && f.Median < median[2], "pooled median sits between the channels");
+            Assert.NotEqual(median[0], f.Median);
+            Assert.NotEqual(median[2], f.Median);
+            Assert.All(mad, m => Assert.InRange(m, 0.00005f, 0.0002f)); // uniform noise of width 0.0004: MAD = 0.0001
+
+            // The shadows clipping point is the one derived from that channel's statistics.
+            for (int c = 0; c < 3; c++)
+                Assert.Equal(median[c] - 2.8f * 1.4826f * mad[c], f.AutoShadowsPerChannel[c], 5);
+        }
+
+        [Fact]
+        public void AutoStf_NoChannelStatsForMonoThumbnailOrSkippedFrames()
+        {
+            XisfRawFrame mono = Noisy(64, 64, 1, new[] { 0.01f }, 0.001f);
+            StfEngine.ComputeAutoStf(mono, false);
+            Assert.Null(mono.MedianPerChannel);
+            Assert.Null(mono.MADPerChannel);
+
+            XisfRawFrame thumb = Noisy(64, 64, 3, new[] { 0.01f, 0.02f, 0.03f }, 0.001f);
+            StfEngine.ComputeAutoStf(thumb, true);
+            Assert.Null(thumb.MedianPerChannel);
+            Assert.Null(thumb.MADPerChannel);
+
+            XisfRawFrame bright = Noisy(64, 64, 3, new[] { 0.4f, 0.4f, 0.4f }, 0.01f);
+            StfEngine.ComputeAutoStf(bright, false);
+            Assert.True(bright.AutoStfSkipped);
+            Assert.Null(bright.MedianPerChannel);
+            Assert.Null(bright.MADPerChannel);
+        }
+
+        [Fact]
+        public void AutoStf_RecomputeDropsStaleChannelStats()
+        {
+            XisfRawFrame f = Noisy(64, 64, 3, new[] { 0.01f, 0.02f, 0.03f }, 0.001f);
+            StfEngine.ComputeAutoStf(f, false);
+            Assert.NotNull(f.MedianPerChannel);
+            StfEngine.ComputeAutoStf(f, true);
+            Assert.Null(f.MedianPerChannel);
+            Assert.Null(f.MADPerChannel);
+        }
+
         [Fact]
         public void AutoStf_StretchRevealsFaintLinearData()
         {

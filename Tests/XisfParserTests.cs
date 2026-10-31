@@ -299,5 +299,30 @@ namespace XisfPreview.Tests
             }
             finally { File.Delete(path); }
         }
+
+        [Fact]
+        public void ExtremeAspectRatio_ThumbnailStaysBounded()
+        {
+            XisfRawFrame f = Load(Xisf.Attached("geometry=\"65535:244:1\" sampleFormat=\"UInt8\"", new byte[65535 * 244]), 2048);
+            Assert.Equal(9362, f.Width);
+            Assert.Equal(34, f.Height);
+        }
+
+        [Fact]
+        public void VeryThinImage_ThumbnailIsNotEmpty()
+        {
+            XisfRawFrame f = Load(Xisf.Attached("geometry=\"65535:3:1\" sampleFormat=\"UInt8\"", new byte[65535 * 3]), 16);
+            Assert.NotNull(f);
+            Assert.True(f.Width > 0 && f.Height > 0);
+        }
+
+        [Theory]
+        [InlineData(6248, 4176, 2048, 2)]
+        [InlineData(6248, 4176, 256, 16)]
+        [InlineData(65535, 244, 2048, 7)]
+        [InlineData(4000, 3000, 0, 1)]
+        [InlineData(1000, 800, 2048, 1)]
+        public void ComputeStep_KeepsNormalImagesAndBoundsExtremeOnes(int w, int h, int target, int expected) =>
+            Assert.Equal(expected, XisfParser.ComputeStep(w, h, target));
     }
 }

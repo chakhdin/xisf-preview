@@ -14,6 +14,7 @@ namespace XisfExplorerPreview
         public static void ComputeAutoStf(XisfRawFrame frame, bool isThumbnail)
         {
             ComputeLinkedAutoStf(frame, isThumbnail);
+            frame.MedianPerChannel = frame.MADPerChannel = null;
 
             int activeChannels = Math.Min(frame.Channels, 3);
             if (!isThumbnail && activeChannels >= 3 && !frame.AutoStfSkipped)
@@ -34,6 +35,8 @@ namespace XisfExplorerPreview
             float[] shadows = new float[activeChannels];
             float[] midtones = new float[activeChannels];
             float[] highlights = new float[activeChannels];
+            float[] medians = new float[activeChannels];
+            float[] mads = new float[activeChannels];
 
             float[] samples = new float[count];
 
@@ -77,6 +80,8 @@ namespace XisfExplorerPreview
 
                 if (x <= 0.000001f) m = SparseMidtones(samples, idx, m);
 
+                medians[c] = median;
+                mads[c] = mad;
                 shadows[c] = c0;
                 midtones[c] = m;
                 highlights[c] = 1.0f;
@@ -85,6 +90,8 @@ namespace XisfExplorerPreview
             frame.AutoShadowsPerChannel = shadows;
             frame.AutoMidtonesPerChannel = midtones;
             frame.AutoHighlightsPerChannel = highlights;
+            frame.MedianPerChannel = medians;
+            frame.MADPerChannel = mads;
         }
 
         // Median 0 (mostly-empty frame): solve the midtone on the non-zero samples instead. sorted

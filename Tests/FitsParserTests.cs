@@ -323,5 +323,78 @@ namespace XisfPreview.Tests
             }
             finally { File.Delete(path); }
         }
+
+        [Fact]
+        public void Bitpix32_WithoutBzero_InAduRange_DividesBy65535()
+        {
+            XisfRawFrame f = Load(Fits.File(32, 2, 1, 1, Fits.Be32(new[] { 1000, 2000 })));
+            Assert.Equal(1000 / 65535f, f.NormalizedData[0], 6);
+            Assert.Equal(2000 / 65535f, f.NormalizedData[1], 6);
+        }
+
+        [Fact]
+        public void Bitpix32_WithoutBzero_AboveAduRange_DividesByFullRange()
+        {
+            XisfRawFrame f = Load(Fits.File(32, 2, 1, 1, Fits.Be32(new[] { 1000, 100000 })));
+            Assert.Equal(100000f / 4294967295f, f.NormalizedData[1], 9);
+        }
+
+        [Fact]
+        public void Bitpix32_WithoutBzero_OneNegativePixel_KeepsThe16BitDivisor()
+        {
+            XisfRawFrame f = Load(Fits.File(32, 3, 1, 1, Fits.Be32(new[] { -5, 1000, 2000 })));
+            Assert.Equal(0f, f.NormalizedData[0], 9);
+            Assert.Equal(2000 / 65535f, f.NormalizedData[2], 6);
+        }
+
+        [Fact]
+        public void Bitpix32_WithBzero_KeepsTheFullDivisorInAduRange()
+        {
+            XisfRawFrame f = Load(Fits.File(32, 2, 1, 1, Fits.Be32(new[] { 1000, 2000 }), Fits.Card("BZERO", "0")));
+            Assert.Equal(2000f / 4294967295f, f.NormalizedData[1], 9);
+        }
+
+        // The only value above 65535 sits in a row the thumbnail does not sample; the divisor must
+        // still come from every row so the thumbnail agrees with the full decode.
+        [Fact]
+        public void Bitpix32_WithoutBzero_ThumbnailDivisorComesFromUnsampledRows()
+        {
+            const int w = 8, h = 8;
+            int[] px = Enumerable.Repeat(1000, w * h).ToArray();
+            px[1] = 100000; // file row 0 (bottom of the image): not sampled at step 4
+            byte[] file = Fits.File(32, w, h, 1, Fits.Be32(px));
+
+            XisfRawFrame thumb = Load(file, 2);
+            XisfRawFrame full = Load(file);
+
+            Assert.Equal(2, thumb.Width);
+            Assert.Equal(2, thumb.Height);
+            Assert.Equal(1000f / 4294967295f, thumb.NormalizedData[0], 9);
+            Assert.Equal(full.NormalizedData[0], thumb.NormalizedData[0], 9);
+        }
+
+        [Fact]
+        public void Bitpix32_WithoutBzero_TruncatedThumbnail_ReturnsNull()
+        {
+            byte[] file = Fits.File(32, 8, 8, 1, Fits.Be32(Enumerable.Repeat(1000, 64)));
+            Assert.Null(Load(file.Take(file.Length - 40).ToArray(), 2));
+        }
+
+        [Fact]
+        public void ExtremeAspectRatio_ThumbnailStaysBounded()
+        {
+            XisfRawFrame f = Load(Fits.File(8, 65535, 244, 1, new byte[65535 * 244]), 2048);
+            Assert.Equal(9362, f.Width);
+            Assert.Equal(34, f.Height);
+        }
+
+        [Fact]
+        public void VeryThinImage_ThumbnailIsNotEmpty()
+        {
+            XisfRawFrame f = Load(Fits.File(8, 65535, 3, 1, new byte[65535 * 3]), 16);
+            Assert.NotNull(f);
+            Assert.True(f.Width > 0 && f.Height > 0);
+            Assert.Equal(f.Width * f.Height, f.NormalizedData.Length);
+        }
     }
 }

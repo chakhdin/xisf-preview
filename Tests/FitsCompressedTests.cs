@@ -323,6 +323,23 @@ namespace XisfPreview.Tests
             Assert.Equal(px[((h - 1) * w)] / 65535f, f.NormalizedData[0], 6);
         }
 
+
+        [Fact]
+        public void ThumbnailDivisorComesFromUnsampledRows()
+        {
+            const int w = 8, h = 8;
+            int[] px = Enumerable.Repeat(1000, w * h).ToArray();
+            px[1] = 100000; // file row 0: not sampled at step 4
+            byte[] file = RiceFits.File(w, h, px);
+
+            XisfRawFrame thumb = Load(file, 2);
+            XisfRawFrame full = Load(file);
+
+            Assert.Equal(2, thumb.Width);
+            Assert.Equal(1000f / 4294967295f, thumb.NormalizedData[0], 9);
+            Assert.Equal(full.NormalizedData[0], thumb.NormalizedData[0], 9);
+        }
+
         private sealed class ShortReadStream : MemoryStream
         {
             public ShortReadStream(byte[] b) : base(b) { }

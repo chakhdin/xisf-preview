@@ -79,6 +79,42 @@ namespace XisfExplorerPreview
             }
         }
 
+        // Largest big-endian int32 in buf[offset .. offset + count); never below 0, like the
+        // compressed path, so negative pixels do not change the divisor.
+        private static long MaxInt32(byte[] buf, int offset, int count)
+        {
+            int max = 0;
+            for (int i = offset; i + 3 < offset + count; i += 4)
+            {
+                int v = (buf[i] << 24) | (buf[i + 1] << 16) | (buf[i + 2] << 8) | buf[i + 3];
+                if (v > max) max = v;
+            }
+            return max;
+        }
+
+        // Streams over the data block in chunks and returns the largest int32 value (see MaxInt32),
+        // or long.MinValue when the stream ends early.
+        private static long ScanInt32Max(Stream stream, long dataStart, long totalBytes)
+        {
+            stream.Seek(dataStart, SeekOrigin.Begin);
+            byte[] chunk = new byte[4194304]; // a multiple of 4, so samples never straddle chunks
+            long max = 0, remaining = totalBytes;
+            while (remaining > 0)
+            {
+                int want = (int)Math.Min(remaining, chunk.Length);
+                int got = 0;
+                while (got < want)
+                {
+                    int r = stream.Read(chunk, got, want - got);
+                    if (r <= 0) return long.MinValue;
+                    got += r;
+                }
+                max = Math.Max(max, MaxInt32(chunk, 0, want));
+                remaining -= want;
+            }
+            return max;
+        }
+
         // Returns the first activeChannels planes as a compact (width/step x height/step)
         // top-down buffer holding exactly the samples the conversion loop would pick for this
         // step. Reads one source row at a time, so memory and I/O scale with the output.
@@ -209,13 +245,14 @@ namespace XisfExplorerPreview
                     flipVertically = false;
                 }
 
-                int step = 1;
-                if (targetDimension > 0 && (width > targetDimension || height > targetDimension))
-                {
-                    step = Math.Max(1, Math.Min(width / targetDimension, height / targetDimension));
-                }
+                int step = XisfParser.ComputeStep(width, height, targetDimension);
 
                 byte[] rawBytes = null;
+
+                // Plain 32-bit data without BZERO is divided by 65535 when it fits that range, so the
+                // divisor depends on the maximum over every row, not just the sampled ones.
+                bool scanInt32Max = bitpix == 32 && !header.ContainsKey("BZERO");
+                double int32Divisor = 4294967295.0;
 
                 // Downscaled request on a seekable stream (shell thumbnails): read only the rows
                 // that survive the subsampling instead of the whole data block. The header loop
@@ -224,6 +261,13 @@ namespace XisfExplorerPreview
                 {
                     long dataStart = stream.Position;
                     if (streamLength < dataStart + totalDataBytes) return null; // truncated pixel data
+
+                    if (scanInt32Max)
+                    {
+                        long scanned = ScanInt32Max(stream, dataStart, totalDataBytes);
+                        if (scanned == long.MinValue) return null;
+                        int32Divisor = scanned <= 65535 ? 65535.0 : 4294967295.0;
+                    }
 
                     rawBytes = ReadSubsampledPlanes(stream, dataStart, width, height, activeChannels,
                         bytesPerPixel, step, flipVertically);
@@ -254,6 +298,9 @@ namespace XisfExplorerPreview
                     }
 
                     if (totalRead < totalDataBytes) return null; // truncated pixel data
+
+                    if (scanInt32Max)
+                        int32Divisor = MaxInt32(rawBytes, 0, rawBytes.Length) <= 65535 ? 65535.0 : 4294967295.0;
                 }
 
                 int outWidth = width / step;
@@ -318,7 +365,7 @@ namespace XisfExplorerPreview
                                 else if (bitpix == 32)
                                 {
                                     int raw = (ptr[0] << 24) | (ptr[1] << 16) | (ptr[2] << 8) | ptr[3];
-                                    norm = (float)((raw * bscale + bzero) / 4294967295.0);
+                                    norm = (float)((raw * bscale + bzero) / int32Divisor);
                                 }
 
                                 if (norm < 0.0f) norm = 0.0f;

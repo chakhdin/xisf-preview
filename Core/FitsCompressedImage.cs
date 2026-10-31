@@ -140,9 +140,7 @@ namespace XisfExplorerPreview
                 if (len > largest) largest = len;
             }
 
-            int step = 1;
-            if (targetDimension > 0 && (width > targetDimension || height > targetDimension))
-                step = Math.Max(1, Math.Min(width / targetDimension, height / targetDimension));
+            int step = XisfParser.ComputeStep(width, height, targetDimension);
             int outWidth = width / step, outHeight = height / step;
 
             // Classic FITS stores row 1 at the bottom; honor an explicit ROWORDER like the plain path.
@@ -171,10 +169,33 @@ namespace XisfExplorerPreview
                 if (!RiceDecode32(comp, len, row, width, blockSize)) return null;
 
                 for (int x = 0; x < outWidth; x++)
+                    raw[(y * outWidth) + x] = row[x * step];
+                if (hasBzero) continue;
+                for (int x = 0; x < width; x++)
+                    if (row[x] > max) max = row[x];
+            }
+
+            // The divisor must not depend on which rows a thumbnail samples, so without BZERO the
+            // rows skipped by the subsampling are decoded too, only to find the maximum.
+            if (!hasBzero && step > 1)
+            {
+                for (int srcY = 0; srcY < height; srcY++)
                 {
-                    int v = row[x * step];
-                    raw[(y * outWidth) + x] = v;
-                    if (v > max) max = v;
+                    int sampledIndex = flip ? (height - 1) - srcY : srcY;
+                    if (sampledIndex % step == 0 && sampledIndex / step < outHeight) continue;
+
+                    int len = BeInt(table, srcY * 8), off = BeInt(table, srcY * 8 + 4);
+                    stream.Seek(heapStart + off, SeekOrigin.Begin);
+                    int got = 0;
+                    while (got < len)
+                    {
+                        int r = stream.Read(comp, got, len - got);
+                        if (r <= 0) return null;
+                        got += r;
+                    }
+                    if (!RiceDecode32(comp, len, row, width, blockSize)) return null;
+                    for (int x = 0; x < width; x++)
+                        if (row[x] > max) max = row[x];
                 }
             }
 

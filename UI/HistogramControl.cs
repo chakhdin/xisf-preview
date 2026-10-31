@@ -24,6 +24,11 @@ namespace XisfExplorerPreview
         public float StatMedian { get; set; }
         public float StatMAD { get; set; }
 
+        // Per-channel median and MAD (R, G, B), shown with the per-channel auto stretch. Null
+        // otherwise: the pooled StatMedian/StatMAD then describe the render.
+        public float[] ChannelMedian { get; set; }
+        public float[] ChannelMAD { get; set; }
+
         public event EventHandler ValuesChanging; // Fired on active drag (live feedback)
         public event EventHandler ValuesChanged;  // Fired on mouse release (full-quality commit)
         public event EventHandler AutoStfClicked;
@@ -48,7 +53,7 @@ namespace XisfExplorerPreview
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
             BackColor = Color.FromArgb(24, 26, 31);
             ForeColor = Color.White;
-            Size = new Size(540, 220);
+            Size = new Size(620, 220); // the per-channel median/MAD rows (three F5 values) need the width
         }
 
         public void SetHistogram(int[] hist, float med, float mad)
@@ -64,6 +69,24 @@ namespace XisfExplorerPreview
             }
             StatMedian = med;
             StatMAD = mad;
+            Invalidate();
+        }
+
+        // Blank panel for when no image is shown (a failed load): no stale histogram, stats or stretch.
+        public void Clear()
+        {
+            _activeDrag = DragMode.None;
+            _dragMoved = false;
+            Array.Clear(_histogram, 0, _histogram.Length);
+            _maxVal = 1;
+            StatMedian = 0f;
+            StatMAD = 0f;
+            Shadows = 0.0f;
+            Midtones = 0.5f;
+            Highlights = 1.0f;
+            ChannelShadows = ChannelMidtones = ChannelHighlights = null;
+            ChannelMedian = ChannelMAD = null;
+            ModeLabel = null;
             Invalidate();
         }
 
@@ -86,6 +109,9 @@ namespace XisfExplorerPreview
             ChannelMidtones = perChannel ? frame.AutoMidtonesPerChannel : null;
             ChannelHighlights = perChannel ? frame.AutoHighlightsPerChannel : null;
             ModeLabel = perChannel ? "Auto (per channel)" : null;
+
+            ChannelMedian = perChannel ? frame.MedianPerChannel : null;
+            ChannelMAD = perChannel ? frame.MADPerChannel : null;
             Invalidate();
         }
 
@@ -187,15 +213,15 @@ namespace XisfExplorerPreview
             DrawStatRow(g, "Midtones:", StatValue(ChannelMidtones, Midtones), statX, ref statY, statFont);
             DrawStatRow(g, "Highlights:", StatValue(ChannelHighlights, Highlights), statX, ref statY, statFont);
             statY += 10;
-            DrawStatRow(g, "Median:", $"{StatMedian:F5}", statX, ref statY, statFont);
-            DrawStatRow(g, "MAD:", $"{StatMAD:F5}", statX, ref statY, statFont);
+            DrawStatRow(g, "Median:", StatValue(ChannelMedian, StatMedian, "F5", "F5"), statX, ref statY, statFont);
+            DrawStatRow(g, "MAD:", StatValue(ChannelMAD, StatMAD, "F5", "F5"), statX, ref statY, statFont);
         }
 
         // R/G/B triple while the per-channel auto stretch is shown, the single linked value otherwise.
-        private static string StatValue(float[] perChannel, float linked)
+        private static string StatValue(float[] perChannel, float linked, string linkedFormat = "F4", string perChannelFormat = "F3")
         {
-            if (perChannel == null || perChannel.Length < 3) return $"{linked:F4}";
-            return $"{perChannel[0]:F3} {perChannel[1]:F3} {perChannel[2]:F3}";
+            if (perChannel == null || perChannel.Length < 3) return linked.ToString(linkedFormat);
+            return $"{perChannel[0].ToString(perChannelFormat)} {perChannel[1].ToString(perChannelFormat)} {perChannel[2].ToString(perChannelFormat)}";
         }
 
         private void DrawButton(Graphics g, Rectangle r, string text, Color bg)
@@ -289,6 +315,7 @@ namespace XisfExplorerPreview
             if (ChannelShadows != null)
             {
                 ChannelShadows = ChannelMidtones = ChannelHighlights = null;
+                ChannelMedian = ChannelMAD = null;
                 ModeLabel = "Linked (manual)";
             }
 

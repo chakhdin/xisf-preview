@@ -154,6 +154,7 @@ namespace XisfExplorerPreview
             {
                 // Do not keep showing (or titling) the previous image under the failed file's name.
                 _currentFrame = null;
+                _histPanel.Clear();
                 SetDisplayBitmap(null);
                 Invalidate();
                 Text = $"Failed to load: {Path.GetFileName(filePath)}";
@@ -276,6 +277,7 @@ namespace XisfExplorerPreview
             _histPanel.Midtones = 0.5f;
             _histPanel.Highlights = 1.0f;
             _histPanel.ChannelShadows = _histPanel.ChannelMidtones = _histPanel.ChannelHighlights = null;
+            _histPanel.ChannelMedian = _histPanel.ChannelMAD = null;
             if (_currentFrame.Channels >= 3) _histPanel.ModeLabel = "Linked (manual)";
             _histPanel.Invalidate();
 
