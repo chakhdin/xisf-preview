@@ -49,6 +49,15 @@ namespace XisfExplorerPreview
 
         public static Bitmap RenderImageFromStream(Stream stream, int targetDimension)
         {
+            // Detection consumes the signature; a non-seekable stream must be buffered first
+            if (stream != null && !stream.CanSeek)
+            {
+                MemoryStream buffered = new MemoryStream();
+                stream.CopyTo(buffered);
+                buffered.Position = 0;
+                stream = buffered;
+            }
+
             AstroFileFormat format = DetectFormat(stream);
 
             if (format == AstroFileFormat.Xisf)
