@@ -299,7 +299,9 @@ const
 // registration - e.g. a stale, surrogate-less preview CLSID made previews of large
 // .fit files come up blank. A handler value is stale if it is not our current CLSID
 // and either is a known old one or its COM registration points at our own assembly.
-// Anything else (another product's handler) is never touched.
+// On Fit.File and Fits.File a value whose CLSID is not registered at all is stale too:
+// it runs nothing and still blanks the preview. Anything else (another product's
+// handler) is never touched.
 function PointsAtOurAssembly(Clsid: String): Boolean;
 var
   CodeBase: String;
@@ -314,6 +316,21 @@ begin
             ((CompareText(Value, KnownStaleClsid) = 0) or PointsAtOurAssembly(Value));
 end;
 
+function IsClsidRegistered(Clsid: String): Boolean;
+var
+  Key: String;
+begin
+  Key := 'Software\Classes\CLSID\' + Clsid;
+  Result := RegKeyExists(HKLM, Key) or RegKeyExists(HKCU, Key) or
+            (IsWin64 and (RegKeyExists(HKLM32, Key) or RegKeyExists(HKCU32, Key)));
+end;
+
+function IsDanglingOnShadowingClass(ClassName, Value, CurrentClsid: String): Boolean;
+begin
+  Result := ((CompareText(ClassName, 'Fit.File') = 0) or (CompareText(ClassName, 'Fits.File') = 0)) and
+            (Value <> '') and (CompareText(Value, CurrentClsid) <> 0) and not IsClsidRegistered(Value);
+end;
+
 procedure RemoveStaleClsid(Clsid: String);
 begin
   if PointsAtOurAssembly(Clsid) then
@@ -326,7 +343,8 @@ var
   Key, Value: String;
 begin
   Key := 'Software\Classes\' + ClassName + '\ShellEx\' + HandlerKey;
-  if RegQueryStringValue(HKLM, Key, '', Value) and IsStaleHandler(Value, CurrentClsid, KnownStaleClsid) then
+  if RegQueryStringValue(HKLM, Key, '', Value) and
+     (IsStaleHandler(Value, CurrentClsid, KnownStaleClsid) or IsDanglingOnShadowingClass(ClassName, Value, CurrentClsid)) then
   begin
     RegDeleteKeyIncludingSubkeys(HKLM, Key);
     RemoveStaleClsid(Value);
