@@ -235,6 +235,15 @@ namespace XisfPreview.Tests
             Assert.Null(Load(RiceFits.File(8, 2, Ramp(8, 2), With(key, value))));
 
         [Fact]
+        public void StreamShorterThanItsLength_ReturnsNullOnEarlyEof()
+        {
+            // Length claims the whole file, so the truncation check passes; the table read then hits EOF.
+            byte[] file = RiceFits.File(8, 2, Ramp(8, 2));
+            int tableStart = file.Length - 2880;
+            Assert.Null(FitsParser.LoadRawFrame(new LyingLengthStream(file.Take(tableStart + 8).ToArray(), file.Length), 0));
+        }
+
+        [Fact]
         public void TruncatedFile_ReturnsNull()
         {
             byte[] file = RiceFits.File(70, 6, Ramp(70, 6));
@@ -318,6 +327,14 @@ namespace XisfPreview.Tests
         {
             public ShortReadStream(byte[] b) : base(b) { }
             public override int Read(byte[] buffer, int offset, int count) => base.Read(buffer, offset, Math.Min(count, 3));
+        }
+
+        // Reports a larger Length than it can deliver, to reach the early-EOF branches of the reads.
+        private sealed class LyingLengthStream : MemoryStream
+        {
+            private readonly long _length;
+            public LyingLengthStream(byte[] b, long length) : base(b) { _length = length; }
+            public override long Length => _length;
         }
 
         private sealed class ForwardOnlyStream : MemoryStream
