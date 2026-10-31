@@ -125,6 +125,7 @@ namespace XisfExplorerPreview
                 string location = imgElem.Attribute("location")?.Value;
                 string pixelStorage = imgElem.Attribute("pixelStorage")?.Value ?? "Planar";
                 string compression = imgElem.Attribute("compression")?.Value;
+                bool bigEndian = string.Equals(imgElem.Attribute("byteOrder")?.Value, "big", StringComparison.OrdinalIgnoreCase);
 
                 // Float32 bounds attribute "lower:upper" (default 0:1); samples are rescaled by it
                 float lowerBound = 0.0f, upperBound = 1.0f;
@@ -219,6 +220,13 @@ namespace XisfExplorerPreview
 
                 long requiredBytes = (long)srcWidth * srcHeight * channels * bytesPerSample;
                 if (pixelData.LongLength < requiredBytes) return null;
+
+                if (bigEndian && bytesPerSample > 1)
+                {
+                    // Samples are decoded as little endian, so swap each one in place
+                    for (long i = 0; i + bytesPerSample <= pixelData.LongLength; i += bytesPerSample)
+                        Array.Reverse(pixelData, (int)i, bytesPerSample);
+                }
 
                 XisfRawFrame result = ProcessRawBuffer(srcWidth, srcHeight, channels, sampleFormat, pixelStorage, pixelData, isThumbnail, targetDimension, lowerBound, upperBound);
                 StfEngine.ComputeAutoStf(result, isThumbnail);
