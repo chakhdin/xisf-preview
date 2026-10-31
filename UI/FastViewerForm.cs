@@ -67,7 +67,7 @@ namespace XisfExplorerPreview
 
             _histPanel.ValuesChanging += (s, e) => ApplyLiveStretch();
             _histPanel.ValuesChanged += (s, e) => ApplyFullStretch();
-            _histPanel.AutoStfClicked += (s, e) => TriggerLinkedAutoStf();
+            _histPanel.AutoStfClicked += (s, e) => TriggerAutoStf();
             _histPanel.ResetClicked += (s, e) => ResetStretch();
             _histPanel.CloseClicked += (s, e) => { _histPanel.Visible = false; };
 
@@ -79,7 +79,7 @@ namespace XisfExplorerPreview
             _bottomToolbar.PrevClicked += (s, e) => Navigate(-1);
             _bottomToolbar.NextClicked += (s, e) => Navigate(1);
             _bottomToolbar.HistogramToggleClicked += (s, e) => { _histPanel.Visible = !_histPanel.Visible; };
-            _bottomToolbar.AutoStfClicked += (s, e) => TriggerLinkedAutoStf();
+            _bottomToolbar.AutoStfClicked += (s, e) => TriggerAutoStf();
 
             Controls.Add(_histPanel);
             Controls.Add(_bottomToolbar);
@@ -177,10 +177,7 @@ namespace XisfExplorerPreview
             SetDisplayBitmap(view.RenderedBitmap);
 
             _histPanel.SetHistogram(_currentFrame.Histogram, _currentFrame.Median, _currentFrame.MAD);
-            _histPanel.Shadows = _currentFrame.AutoShadows;
-            _histPanel.Midtones = _currentFrame.AutoMidtones;
-            _histPanel.Highlights = _currentFrame.AutoHighlights;
-            _histPanel.Invalidate();
+            _histPanel.SetAutoStretch(_currentFrame);
 
             FitToScreen();
             UpdateTitle();
@@ -253,14 +250,11 @@ namespace XisfExplorerPreview
             }, token);
         }
 
-        private void TriggerLinkedAutoStf()
+        private void TriggerAutoStf()
         {
             if (_currentFrame == null) return;
 
-            _histPanel.Shadows = _currentFrame.AutoShadows;
-            _histPanel.Midtones = _currentFrame.AutoMidtones;
-            _histPanel.Highlights = _currentFrame.AutoHighlights;
-            _histPanel.Invalidate();
+            _histPanel.SetAutoStretch(_currentFrame);
 
             SetDisplayBitmap(StfEngine.RenderAutoStretch(_currentFrame, 1));
 
@@ -273,6 +267,8 @@ namespace XisfExplorerPreview
             _histPanel.Shadows = 0.0f;
             _histPanel.Midtones = 0.5f;
             _histPanel.Highlights = 1.0f;
+            _histPanel.ChannelShadows = _histPanel.ChannelMidtones = _histPanel.ChannelHighlights = null;
+            if (_currentFrame.Channels >= 3) _histPanel.ModeLabel = "Linked (manual)";
             _histPanel.Invalidate();
 
             SetDisplayBitmap(StfEngine.RenderBitmapFromRaw(_currentFrame, 0.0f, 0.5f, 1.0f, 1));
@@ -443,7 +439,7 @@ namespace XisfExplorerPreview
             }
             else if (e.KeyCode == Keys.Space)
             {
-                TriggerLinkedAutoStf();
+                TriggerAutoStf();
             }
             else if (e.KeyCode == Keys.F)
             {

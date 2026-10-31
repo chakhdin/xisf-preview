@@ -282,6 +282,40 @@ namespace XisfPreview.Tests
 
                 var hist = v.Field<HistogramControl>("_histPanel");
                 var frame = v.Field<XisfRawFrame>("_currentFrame");
+
+                // The auto stretch is unlinked: the HUD shows the R/G/B values the render uses.
+                Assert.Equal("Auto (per channel)", hist.ModeLabel);
+                Assert.Equal(frame.AutoShadowsPerChannel, hist.ChannelShadows);
+                Assert.Equal(frame.AutoMidtonesPerChannel, hist.ChannelMidtones);
+                Assert.Equal(frame.AutoHighlightsPerChannel, hist.ChannelHighlights);
+                Assert.True(hist.ChannelMidtones.Distinct().Count() > 1, "channels should differ for this image");
+                using (Bitmap expected = StfEngine.RenderAutoStretch(frame, 1))
+                    Assert.Equal(Pixels.Rgb(expected), Pixels.Rgb(v.Field<Bitmap>("_displayBitmap")));
+
+                // Dragging a slider switches to a linked stretch and says so.
+                hist.Visible = true;
+                using (var paint = new Bitmap(hist.Width, hist.Height)) // hit-test rectangles are computed while painting
+                    hist.DrawToBitmap(paint, new Rectangle(0, 0, hist.Width, hist.Height));
+                MethodInfo Down = typeof(HistogramControl).GetMethod("OnMouseDown", BindingFlags.NonPublic | BindingFlags.Instance);
+                MethodInfo Move = typeof(HistogramControl).GetMethod("OnMouseMove", BindingFlags.NonPublic | BindingFlags.Instance);
+                MethodInfo Up = typeof(HistogramControl).GetMethod("OnMouseUp", BindingFlags.NonPublic | BindingFlags.Instance);
+                MouseEventArgs At(int x) => new MouseEventArgs(MouseButtons.Left, 1, x, 170, 0);
+                int mx = 20 + (int)(hist.Midtones * 330);
+
+                // A click without movement changes nothing: still per channel, same bitmap.
+                byte[] before = Pixels.Rgb(v.Field<Bitmap>("_displayBitmap"));
+                Down.Invoke(hist, new object[] { At(mx) });
+                Up.Invoke(hist, new object[] { At(mx) });
+                Assert.Equal("Auto (per channel)", hist.ModeLabel);
+                Assert.Equal(frame.AutoMidtonesPerChannel, hist.ChannelMidtones);
+                Assert.Equal(before, Pixels.Rgb(v.Field<Bitmap>("_displayBitmap")));
+
+                Down.Invoke(hist, new object[] { At(mx) });
+                Move.Invoke(hist, new object[] { At(mx + 20) });
+                Up.Invoke(hist, new object[] { At(mx + 20) });
+
+                Assert.Equal("Linked (manual)", hist.ModeLabel);
+                Assert.Null(hist.ChannelMidtones);
                 using (Bitmap expected = StfEngine.RenderBitmapFromRaw(frame, hist.Shadows, hist.Midtones, hist.Highlights))
                     Assert.Equal(Pixels.Rgb(expected), Pixels.Rgb(v.Field<Bitmap>("_displayBitmap")));
             }

@@ -14,7 +14,7 @@ Estensione ad alte prestazioni per la Shell di Windows e visualizzatore rapido p
 
 - **Anteprime in Esplora File**: Estensione nativa `IThumbnailProvider` per la generazione rapida e ad alta risoluzione delle miniature direttamente nelle cartelle di sistema.
 - **Riquadro di Anteprima**: Integrazione nativa `IPreviewHandler` per visualizzare i frame a piena risoluzione nel riquadro di anteprima di Esplora File (`Alt + P`).
-- **AutoSTF Collegato (Linked) conforme a PixInsight**: Calcolo conforme alla specifica PixInsight (Eq. 8.5.7) con statistiche congiunte di mediana e MAD su tutti i canali attivi per eliminare dominanti di colore sui frame lineari grezzi.
+- **AutoSTF conforme a PixInsight**: Auto-stretch Screen Transfer Function secondo la specifica PixInsight (sezione 8.5.7) con statistiche di mediana e MAD. Le immagini RGB sono stirate canale per canale (non collegato), il che neutralizza le dominanti di colore sui frame lineari grezzi; il pannello istogramma del viewer mostra i valori R/G/B ("Auto (per channel)") e passa a uno stretch collegato non appena si trascina un cursore.
 - **Motore I/O ad Alte Prestazioni**: Lettura sequenziale in blocco direttamente in memoria e decodifica parallela per l'apertura immediata di immagini multi-megapixel da sensori CCD e CMOS.
 - **Visualizzatore Standalone FastViewer**:
   - Adattamento automatico dell'immagine alla finestra all'avvio.
@@ -52,7 +52,7 @@ I frame FITS compressi a tile oltre i 16 megapixel non vengono decodificati: per
 |---|---|
 | `PageDown` / `Freccia Destra` | Immagine astronomica successiva nella cartella |
 | `PageUp` / `Freccia Sinistra` | Immagine astronomica precedente nella cartella |
-| `Spazio` | Riallinea e applica l'AutoSTF collegato |
+| `Spazio` | Riallinea e applica l'AutoSTF (per canale su RGB) |
 | `F` | Adatta l'immagine alle dimensioni della finestra |
 | `H` | Mostra / nasconde il pannello HUD dell'istogramma |
 | `Rotella Mouse` | Zoom fluido centrato sulla posizione del puntatore |
