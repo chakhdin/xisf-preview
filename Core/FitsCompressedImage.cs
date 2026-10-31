@@ -123,8 +123,10 @@ namespace XisfExplorerPreview
             // lie inside the heap, be no larger than a worst-case row, and be no smaller than the
             // cheapest possible encoding (4 bytes for the first value plus 5 bits per block). Tiles may
             // overlap, so the minimum size does not tie the pixel count to the file size. The work is
-            // bounded by MaxTotalPixels, and the summed tile lengths may not exceed the heap, so rows
-            // cannot all reuse the same bytes.
+            // bounded by MaxTotalPixels. Bounds: rows * minTile <= sum of tile lengths <= PCOUNT, and the
+            // zero-run scan of each row is limited to that row's tile length, so the total scan is
+            // bounded by the summed tile bytes. A padded PCOUNT does allow tiles to share bytes, but
+            // the sum still caps the total bytes decoded, so there is no amplification.
             long totalTileBytes = 0;
             long maxTile = 5L * width + 16;
             long minTile = 4 + ((((long)width + blockSize - 1) / blockSize * 5) + 7) / 8;
