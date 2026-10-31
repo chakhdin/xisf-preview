@@ -98,7 +98,7 @@ namespace XisfExplorerPreview
             // Title bar
             _titleBar = new Rectangle(0, 0, Width, 30);
             g.FillRectangle(new SolidBrush(Color.FromArgb(32, 34, 40)), _titleBar);
-            TextRenderer.DrawText(g, "Histogram & Stretch", new Font("Segoe UI", 9.5f, FontStyle.Bold), new Point(10, 6), Color.Gainsboro);
+            TextRenderer.DrawText(g, "Histogram & Stretch", new Font("Segoe UI", 9.5f, FontStyle.Bold), new Point(10, 6), Color.Gainsboro, TextFormatFlags.NoPrefix);
 
             _btnAutoStf = new Rectangle(Width - 190, 4, 75, 22);
             _btnReset = new Rectangle(Width - 110, 4, 65, 22);
