@@ -30,6 +30,7 @@ A high-performance Windows Shell extension and lightweight viewer for astronomic
 |---|---|---|
 | **XISF** | `.xisf` | 8-bit UInt, 16-bit UInt, 32-bit Float (Planar & Interleaved, uncompressed) |
 | **FITS** | `.fits`, `.fit`, `.fts` | 8-bit UInt, 16-bit Int/UInt (BZERO/BSCALE), 32-bit Int, -32 IEEE Float |
+| **FITS (tile-compressed)** | `.fits`, `.fit`, `.fts` | RICE_1, 32-bit integer, one row per tile, lossless (e.g. HOPS output) |
 
 ---
 

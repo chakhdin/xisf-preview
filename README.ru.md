@@ -30,6 +30,7 @@
 |---|---|---|
 | **XISF** | `.xisf` | 8-бит UInt, 16-бит UInt, 32-бит Float (Planar и Interleaved, без сжатия) |
 | **FITS** | `.fits`, `.fit`, `.fts` | 8-бит UInt, 16-бит Int/UInt (с калибровкой BZERO/BSCALE), 32-бит Int, -32 IEEE Float |
+| **FITS (со сжатием по тайлам)** | `.fits`, `.fit`, `.fts` | RICE_1, 32-бит целые, один ряд на тайл, без потерь (например, вывод HOPS) |
 
 ---
 
