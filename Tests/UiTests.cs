@@ -437,6 +437,129 @@ namespace XisfPreview.Tests
             Assert.Equal(0.5f, c.Midtones);
             form.Dispose();
         });
+
+        // Drag fixture: a shown control with the midtones handle at x = 185 (0.5 of the chart).
+        private sealed class DragRig : IDisposable
+        {
+            public readonly Form Form;
+            public readonly HistogramControl C;
+            public int Changing, Changed, Auto;
+            private readonly MethodInfo _down = typeof(HistogramControl).GetMethod("OnMouseDown", BindingFlags.NonPublic | BindingFlags.Instance);
+            private readonly MethodInfo _move = typeof(HistogramControl).GetMethod("OnMouseMove", BindingFlags.NonPublic | BindingFlags.Instance);
+            private readonly MethodInfo _up = typeof(HistogramControl).GetMethod("OnMouseUp", BindingFlags.NonPublic | BindingFlags.Instance);
+
+            public DragRig()
+            {
+                Form = new Form { StartPosition = FormStartPosition.Manual, Location = new Point(-5000, -5000), ShowInTaskbar = false, Size = new Size(700, 400) };
+                C = new HistogramControl();
+                Form.Controls.Add(C);
+                Form.Show();
+                Paint(C).Dispose(); // hit-test rectangles are computed while painting
+                C.ValuesChanging += (s, e) => Changing++;
+                C.ValuesChanged += (s, e) => Changed++;
+                C.AutoStfClicked += (s, e) => Auto++;
+            }
+
+            private static MouseEventArgs At(MouseButtons b, int x, int y) => new MouseEventArgs(b, 1, x, y, 0);
+            public void Down(MouseButtons b, int x, int y) => _down.Invoke(C, new object[] { At(b, x, y) });
+            public void Move(MouseButtons b, int x, int y) => _move.Invoke(C, new object[] { At(b, x, y) });
+            public void Up(MouseButtons b, int x, int y) => _up.Invoke(C, new object[] { At(b, x, y) });
+            public void Dispose() => Form.Dispose();
+        }
+
+        // Space calls SetAutoStretch mid-drag: the next move must not edit the sliders or fire anything.
+        [Fact]
+        public void SetAutoStretch_MidDrag_CancelsDrag() => Sta.Run(() =>
+        {
+            using (var r = new DragRig())
+            {
+                r.Down(MouseButtons.Left, 185, 170);
+                r.Move(MouseButtons.Left, 250, 170);
+                int changing = r.Changing;
+
+                r.C.SetAutoStretch(new XisfRawFrame { Channels = 1, AutoShadows = 0.1f, AutoMidtones = 0.3f, AutoHighlights = 0.9f });
+                r.Move(MouseButtons.Left, 300, 170);
+                r.Up(MouseButtons.Left, 300, 170);
+
+                Assert.Equal(0.3f, r.C.Midtones);
+                Assert.Equal(changing, r.Changing);
+                Assert.Equal(0, r.Changed);
+            }
+        });
+
+        // Right-press on the Auto button mid-drag: the drag ends, later moves do nothing.
+        [Fact]
+        public void RightPressOnAuto_MidDrag_CancelsDrag() => Sta.Run(() =>
+        {
+            using (var r = new DragRig())
+            {
+                r.Down(MouseButtons.Left, 185, 170);
+                r.Move(MouseButtons.Left, 250, 170);
+                int changing = r.Changing;
+                float mid = r.C.Midtones;
+
+                r.Down(MouseButtons.Right, 380, 10); // Auto stretch button
+                r.Move(MouseButtons.Left, 300, 170);
+
+                Assert.Equal(1, r.Auto);
+                Assert.Equal(mid, r.C.Midtones);
+                Assert.Equal(changing, r.Changing);
+                Assert.Equal(0, r.Changed); // Auto replaces the render: no commit
+            }
+        });
+
+        [Fact]
+        public void Move_WithoutDragButtonHeld_DoesNotEdit() => Sta.Run(() =>
+        {
+            using (var r = new DragRig())
+            {
+                r.Down(MouseButtons.Left, 185, 170);
+                r.Move(MouseButtons.None, 300, 170);
+                r.Move(MouseButtons.Right, 300, 170);
+
+                Assert.Equal(0.5f, r.C.Midtones);
+                Assert.Equal(0, r.Changing);
+            }
+        });
+
+        [Fact]
+        public void Release_OfOtherButton_DoesNotEndDrag() => Sta.Run(() =>
+        {
+            using (var r = new DragRig())
+            {
+                r.Down(MouseButtons.Left, 185, 170);
+                r.Move(MouseButtons.Left, 250, 170);
+                r.Up(MouseButtons.Right, 250, 170);
+                Assert.Equal(0, r.Changed);
+
+                r.Move(MouseButtons.Left, 300, 170);
+                Assert.True(r.C.Midtones > 0.7f);
+
+                r.Up(MouseButtons.Left, 300, 170);
+                Assert.Equal(1, r.Changed);
+            }
+        });
+
+        // A second button pressed on empty space mid-drag must commit the moved drag once,
+        // otherwise the image stays at draft quality.
+        [Fact]
+        public void SecondPress_OnEmptySpace_AfterMove_CommitsOnce() => Sta.Run(() =>
+        {
+            using (var r = new DragRig())
+            {
+                r.Down(MouseButtons.Left, 185, 170);
+                r.Move(MouseButtons.Left, 250, 170);
+                int changing = r.Changing;
+
+                r.Down(MouseButtons.Right, 340, 120); // empty chart space
+                Assert.Equal(1, r.Changed);
+
+                r.Move(MouseButtons.Left, 300, 170);
+                r.Up(MouseButtons.Left, 300, 170);
+                Assert.Equal(1, r.Changed);
+                Assert.Equal(changing, r.Changing);
+            }
+        });
     }
 
     public class ToolbarAndPreviewControlTests
