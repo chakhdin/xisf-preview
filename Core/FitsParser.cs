@@ -167,7 +167,10 @@ namespace XisfExplorerPreview
                 if (!int.TryParse(header["BITPIX"], out int bitpix)) return null;
                 if (bitpix != 8 && bitpix != 16 && bitpix != 32 && bitpix != -32) return null; // unsupported BITPIX
 
-                if (!int.TryParse(header["NAXIS"], out int naxis) || naxis < 2) return null;
+                if (!int.TryParse(header["NAXIS"], out int naxis)) return null;
+                // Empty primary HDU: a tile-compressed image may follow in the first extension.
+                if (naxis == 0) return FitsCompressedImage.Load(stream, header, targetDimension);
+                if (naxis < 2) return null;
 
                 if (!header.ContainsKey("NAXIS1") || !header.ContainsKey("NAXIS2")) return null;
                 if (!int.TryParse(header["NAXIS1"], out int width) || !int.TryParse(header["NAXIS2"], out int height))
