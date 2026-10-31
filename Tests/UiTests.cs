@@ -41,6 +41,8 @@ namespace XisfPreview.Tests
     internal sealed class ViewerHarness : IDisposable
     {
         [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr h, int msg, IntPtr w, IntPtr l);
+        [DllImport("user32.dll")] private static extern bool GetKeyboardState(byte[] state);
+        [DllImport("user32.dll")] private static extern bool SetKeyboardState(byte[] state);
         private const int WM_KEYDOWN = 0x0100;
         private const int WM_KEYUP = 0x0101;
 
@@ -78,6 +80,21 @@ namespace XisfPreview.Tests
             PostMessage(target, WM_KEYDOWN, (IntPtr)(int)key, IntPtr.Zero);
             PostMessage(target, WM_KEYUP, (IntPtr)(int)key, IntPtr.Zero);
             Sta.Pump();
+        }
+
+        // Marks the modifier as held for this thread only, so the real keyboard is not involved.
+        public void PressWithModifier(Keys key, Keys modifier)
+        {
+            var state = new byte[256];
+            GetKeyboardState(state);
+            state[(int)modifier] = 0x80;
+            SetKeyboardState(state);
+            try { Press(key); }
+            finally
+            {
+                state[(int)modifier] = 0;
+                SetKeyboardState(state);
+            }
         }
 
         public T Field<T>(string name) =>
@@ -139,6 +156,26 @@ namespace XisfPreview.Tests
                 v.Add("b.fts", Sample(600));
                 v.Open(a);
                 v.Press(key);
+                Assert.Contains("b.fts", v.Form.Text);
+            }
+        });
+
+        // Same as PageUp/PageDown, which ignore modifiers too.
+        [Theory]
+        [InlineData(Keys.Left, Keys.ShiftKey)]
+        [InlineData(Keys.Left, Keys.ControlKey)]
+        [InlineData(Keys.Left, Keys.Menu)]
+        [InlineData(Keys.Right, Keys.ShiftKey)]
+        [InlineData(Keys.Right, Keys.ControlKey)]
+        [InlineData(Keys.Right, Keys.Menu)]
+        public void ArrowKey_WithModifier_StillNavigates(Keys key, Keys modifier) => Sta.Run(() =>
+        {
+            using (var v = new ViewerHarness())
+            {
+                string a = v.Add("a.fits", Sample(500));
+                v.Add("b.fts", Sample(600));
+                v.Open(a);
+                v.PressWithModifier(key, modifier);
                 Assert.Contains("b.fts", v.Form.Text);
             }
         });
