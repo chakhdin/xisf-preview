@@ -52,6 +52,15 @@ namespace XisfPreview.Tests
             Assert.Equal(new[] { 0.25f, 0f, 0f, 1f }, f.NormalizedData);
         }
 
+        [Fact]
+        public void BitpixMinus32_NaNFromScaling_BecomesZero()
+        {
+            // 0 x Infinity is NaN on the scaled value, not on the raw one.
+            XisfRawFrame f = Load(Fits.File(-32, 2, 1, 1, Fits.BeFloat(new[] { 0f, 0.5f }),
+                Fits.Card("BSCALE", "Infinity")));
+            Assert.Equal(new[] { 0f, 1f }, f.NormalizedData);
+        }
+
         // Plenty of writers store float data in ADU (0..65535), not 0..1. The image must keep
         // its structure instead of clipping to solid white.
         [Fact]
@@ -59,6 +68,44 @@ namespace XisfPreview.Tests
         {
             XisfRawFrame f = Load(Fits.File(-32, 2, 1, 1, Fits.BeFloat(new[] { 1000f, 40000f })));
             Assert.NotEqual(f.NormalizedData[0], f.NormalizedData[1]);
+        }
+
+        // ADU-range float data (max <= 65535) is divided by 65535, keeping relative levels.
+        [Fact]
+        public void BitpixMinus32_AduRange_DividesBy65535()
+        {
+            XisfRawFrame f = Load(Fits.File(-32, 2, 1, 1, Fits.BeFloat(new[] { 1000f, 40000f })));
+            Assert.Equal(1000f / 65535f, f.NormalizedData[0], 5);
+            Assert.Equal(40000f / 65535f, f.NormalizedData[1], 5);
+        }
+
+        // 8-bit values stored as float (max <= 255) are divided by 255.
+        [Fact]
+        public void BitpixMinus32_EightBitValues_DividesBy255()
+        {
+            XisfRawFrame f = Load(Fits.File(-32, 2, 1, 1, Fits.BeFloat(new[] { 51f, 255f })));
+            Assert.Equal(0.2f, f.NormalizedData[0], 5);
+            Assert.Equal(1f, f.NormalizedData[1], 5);
+        }
+
+        // Above 65535 the finite maximum is the scale; +Inf does not count towards it and clamps to 1.
+        [Fact]
+        public void BitpixMinus32_BeyondAduRange_DividesByMaxIgnoringInf()
+        {
+            XisfRawFrame f = Load(Fits.File(-32, 4, 1, 1,
+                Fits.BeFloat(new[] { 100000f, 50000f, float.PositiveInfinity, -5f })));
+            Assert.Equal(new[] { 1f, 0.5f, 1f, 0f }, f.NormalizedData);
+        }
+
+        // Inf alongside ADU data must not force the scale to infinity.
+        [Fact]
+        public void BitpixMinus32_InfWithMaxAboveOne_StillScalesFiniteSamples()
+        {
+            XisfRawFrame f = Load(Fits.File(-32, 3, 1, 1,
+                Fits.BeFloat(new[] { 1000f, float.PositiveInfinity, 40000f })));
+            Assert.Equal(1000f / 65535f, f.NormalizedData[0], 5);
+            Assert.Equal(1f, f.NormalizedData[1]);
+            Assert.Equal(40000f / 65535f, f.NormalizedData[2], 5);
         }
 
         [Fact]
