@@ -270,6 +270,8 @@ namespace XisfExplorerPreview
 
         private void ResetStretch()
         {
+            if (_currentFrame == null) return;
+
             _histPanel.Shadows = 0.0f;
             _histPanel.Midtones = 0.5f;
             _histPanel.Highlights = 1.0f;
