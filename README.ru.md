@@ -66,6 +66,7 @@
 ### Требования
 - [.NET Framework 4.8 Developer Pack / SDK](https://dotnet.microsoft.com/download/dotnet-framework/net48)
 - [Inno Setup 6](https://jrsoftware.org/isdl.php)
+- Файл ключа строгого имени `key.snk` в корне репозитория. Он указан в gitignore, поэтому в свежем клоне его нет, и сборка завершается ошибкой об отсутствующем ключе. Создайте собственный командой `sn -k key.snk` в Developer Command Prompt (инструмент .NET Framework SDK); ключ только присваивает сборке строгое имя и больше ни с чем в репозитории не связан.
 
 ### Сборка
 

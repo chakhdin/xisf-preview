@@ -66,6 +66,7 @@ I frame FITS compressi a tile oltre i 16 megapixel non vengono decodificati: per
 ### Prerequisiti
 - [.NET Framework 4.8 Developer Pack / SDK](https://dotnet.microsoft.com/download/dotnet-framework/net48)
 - [Inno Setup 6](https://jrsoftware.org/isdl.php)
+- Un file di chiave con nome sicuro `key.snk` nella cartella principale del repository. È in gitignore, quindi un clone appena creato non lo contiene e la compilazione fallisce con un errore di chiave mancante. Generane uno tuo con `sn -k key.snk` da un Developer Command Prompt (lo strumento del .NET Framework SDK); la chiave serve solo a dare un nome sicuro all'assembly e non è legata ad altro nel repository.
 
 ### Istruzioni di compilazione
 
