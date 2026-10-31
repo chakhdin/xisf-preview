@@ -32,6 +32,8 @@ Estensione ad alte prestazioni per la Shell di Windows e visualizzatore rapido p
 | **FITS** | `.fits`, `.fit`, `.fts` | UInt 8-bit, Int/UInt 16-bit (con BZERO/BSCALE), Int 32-bit, Float IEEE -32 |
 | **FITS (compresso a tile)** | `.fits`, `.fit`, `.fts` | RICE_1, intero 32-bit, una riga per tile, senza perdita (es. output di HOPS) |
 
+I frame FITS compressi a tile oltre i 16 megapixel non vengono decodificati: per questi file non viene generata alcuna anteprima né miniatura.
+
 ---
 
 ## Installazione
