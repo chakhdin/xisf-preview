@@ -33,6 +33,7 @@ namespace XisfExplorerPreview
         private enum DragMode { None, Window, Shadows, Midtones, Highlights }
         private DragMode _activeDrag = DragMode.None;
         private bool _dragMoved; // a press and release without movement must not change the stretch
+        private MouseButtons _dragButton; // the button that started the drag; other buttons never act on it
         private Point _dragStartMouse;
         private Point _dragStartLocation;
 
@@ -70,6 +71,10 @@ namespace XisfExplorerPreview
         // as StfEngine.RenderAutoStretch), otherwise the single linked/mono triple.
         public void SetAutoStretch(XisfRawFrame frame)
         {
+            // A drag still in progress would edit the sliders on the next move and render linked under an Auto HUD.
+            _activeDrag = DragMode.None;
+            _dragMoved = false;
+
             Shadows = frame.AutoShadows;
             Midtones = frame.AutoMidtones;
             Highlights = frame.AutoHighlights;
@@ -219,6 +224,12 @@ namespace XisfExplorerPreview
 
         protected override void OnMouseDown(MouseEventArgs e)
         {
+            // A press while a drag is still active (another button) interrupts it. Auto, Reset and Close replace
+            // or dismiss the render; anywhere else a moved drag must be committed or the image stays at draft quality.
+            bool interruptedMove = _activeDrag != DragMode.None && _activeDrag != DragMode.Window && _dragMoved;
+            _activeDrag = DragMode.None;
+            _dragMoved = false;
+
             if (_btnClose.Contains(e.Location))
             {
                 CloseClicked?.Invoke(this, EventArgs.Empty);
@@ -235,7 +246,9 @@ namespace XisfExplorerPreview
                 return;
             }
 
-            _dragMoved = false;
+            if (interruptedMove) ValuesChanged?.Invoke(this, EventArgs.Empty);
+
+            _dragButton = e.Button;
             int sx = _chartArea.Left + (int)(Shadows * _chartArea.Width);
             int mx = _chartArea.Left + (int)(Midtones * _chartArea.Width);
             int hx = _chartArea.Left + (int)(Highlights * _chartArea.Width);
@@ -254,6 +267,8 @@ namespace XisfExplorerPreview
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
+            if (_activeDrag != DragMode.None && (e.Button & _dragButton) == 0) return;
+
             if (_activeDrag == DragMode.Window)
             {
                 Point cur = Cursor.Position;
@@ -296,6 +311,8 @@ namespace XisfExplorerPreview
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
+            if (_activeDrag != DragMode.None && e.Button != _dragButton) return;
+
             if (_activeDrag != DragMode.None && _activeDrag != DragMode.Window && _dragMoved)
             {
                 ValuesChanged?.Invoke(this, EventArgs.Empty);
