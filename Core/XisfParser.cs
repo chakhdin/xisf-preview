@@ -171,7 +171,7 @@ namespace XisfExplorerPreview
                     string[] locParts = location.Split(':');
                     if (locParts.Length < 3) return null;
                     if (!long.TryParse(locParts[1], out long position) ||
-                        !int.TryParse(locParts[2], out int size) ||
+                        !long.TryParse(locParts[2], out long size) ||
                         position < 0 || size < 0)
                         return null;
 
@@ -179,7 +179,7 @@ namespace XisfExplorerPreview
 
                     // Validate against the declared geometry and the real file length before
                     // allocating anything, so a tiny file cannot request a huge buffer.
-                    if (size < requiredAttachmentBytes || requiredAttachmentBytes > int.MaxValue)
+                    if (size < requiredAttachmentBytes)
                         return null;
                     if (stream.CanSeek && position + requiredAttachmentBytes > stream.Length)
                         return null;
@@ -200,6 +200,8 @@ namespace XisfExplorerPreview
                     }
                     else
                     {
+                        // The full-buffer path needs the whole block in one array
+                        if (requiredAttachmentBytes > int.MaxValue) return null;
                         reader.BaseStream.Seek(position, SeekOrigin.Begin);
                         pixelData = reader.ReadBytes((int)requiredAttachmentBytes);
                     }
