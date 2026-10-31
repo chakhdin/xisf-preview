@@ -239,15 +239,15 @@ namespace XisfExplorerPreview
             int mx = _chartArea.Left + (int)(Midtones * _chartArea.Width);
             int hx = _chartArea.Left + (int)(Highlights * _chartArea.Width);
 
-            if (Math.Abs(e.X - mx) < 8) _activeDrag = DragMode.Midtones;
-            else if (Math.Abs(e.X - sx) < 8) _activeDrag = DragMode.Shadows;
-            else if (Math.Abs(e.X - hx) < 8) _activeDrag = DragMode.Highlights;
-            else if (_titleBar.Contains(e.Location))
+            if (_titleBar.Contains(e.Location))
             {
                 _activeDrag = DragMode.Window;
                 _dragStartMouse = Cursor.Position;
                 _dragStartLocation = Location;
             }
+            else if (Math.Abs(e.X - mx) < 8) _activeDrag = DragMode.Midtones;
+            else if (Math.Abs(e.X - sx) < 8) _activeDrag = DragMode.Shadows;
+            else if (Math.Abs(e.X - hx) < 8) _activeDrag = DragMode.Highlights;
             else _activeDrag = DragMode.None;
         }
 
