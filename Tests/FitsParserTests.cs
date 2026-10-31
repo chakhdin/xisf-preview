@@ -108,6 +108,36 @@ namespace XisfPreview.Tests
             Assert.Equal(40000f / 65535f, f.NormalizedData[2], 5);
         }
 
+        // A finished 0..1 image with one sample slightly above 1 (rounding in the writer) must not
+        // be treated as ADU data: the other samples stay put and the outlier clamps to 1.
+        [Fact]
+        public void BitpixMinus32_MaxSlightlyAboveOne_ClampsInsteadOfScaling()
+        {
+            XisfRawFrame f = Load(Fits.File(-32, 3, 1, 1, Fits.BeFloat(new[] { 0.1999f, 0.5f, 1.0001f })));
+            Assert.Equal(0.1999f, f.NormalizedData[0], 5);
+            Assert.Equal(0.5f, f.NormalizedData[1], 5);
+            Assert.Equal(1f, f.NormalizedData[2]);
+        }
+
+        // The tolerance is inclusive: a maximum of exactly 1.01 is still in range.
+        [Fact]
+        public void BitpixMinus32_MaxExactlyAtTolerance_ClampsInsteadOfScaling()
+        {
+            XisfRawFrame f = Load(Fits.File(-32, 3, 1, 1, Fits.BeFloat(new[] { 0.1999f, 0.5f, 1.01f })));
+            Assert.Equal(0.1999f, f.NormalizedData[0], 5);
+            Assert.Equal(0.5f, f.NormalizedData[1], 5);
+            Assert.Equal(1f, f.NormalizedData[2]);
+        }
+
+        // Just past the tolerance the data is treated as 8-bit ADU again.
+        [Fact]
+        public void BitpixMinus32_MaxJustAboveTolerance_DividesBy255()
+        {
+            XisfRawFrame f = Load(Fits.File(-32, 2, 1, 1, Fits.BeFloat(new[] { 0.51f, 1.02f })));
+            Assert.Equal(0.51f / 255f, f.NormalizedData[0], 5);
+            Assert.Equal(1.02f / 255f, f.NormalizedData[1], 5);
+        }
+
         [Fact]
         public void BitpixMinus32_AppliesBscaleAndBzero()
         {

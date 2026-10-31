@@ -28,8 +28,10 @@ namespace XisfExplorerPreview
         private const long MaxArrayBytes = 0x7FFFFFC7L;
 
         // Float data is nominally 0..1, but many writers store ADU (0..255 or 0..65535) or other
-        // unbounded values. When the finite maximum exceeds 1, divide by 255 / 65535 for the common
-        // 8/16-bit ranges, otherwise by the maximum. One scale for all channels, so colour balance
+        // unbounded values. When the finite maximum exceeds 1.01, divide by 255 / 65535 for the common
+        // 8/16-bit ranges, otherwise by the maximum. A maximum up to 1.01 counts as a finished 0..1
+        // image whose few overshooting samples (writer rounding) just clamp, so one 1.0001 sample
+        // cannot make the whole image 255 times darker. One scale for all channels, so colour balance
         // survives. Never triggers on negative values: those just clamp to 0. Runs on the samples
         // that survived subsampling, so seekable and forward-only reads agree.
         private static void NormalizeFloatRange(float[] data)
@@ -48,7 +50,7 @@ namespace XisfExplorerPreview
             }, local => { lock (gate) { if (local > max) max = local; } });
 
             double scale = 1.0;
-            if (max > 1.0f)
+            if (max > 1.01f)
                 scale = max <= 255.0f ? 255.0 : (max <= 65535.0f ? 65535.0 : max);
 
             Parallel.For(0, (data.Length + 65535) / 65536, chunk =>
