@@ -8,14 +8,14 @@ Decode with `System.IO.Compression.DeflateStream` (net48, no new package): skip 
 
 **Blocked by:** none
 
-**Status:** needs-verification
+**Status:** done
 
 - [ ] Tests build small zlib and zlib+sh XISF files in the test (UInt8, UInt16 and Float32; at least one Planar and one Interleaved; an attachment and an inline or embedded block) and check the decoded pixels against the uncompressed originals.
 - [ ] The declared uncompressed size must equal width × height × channels × bytes per sample before anything is allocated, and the compressed size is checked against the file length as the attachment path does; a mismatch, an unknown codec, a bad item size or a truncated or corrupt stream gives null, never an exception. Tests cover each case, including a tiny file that declares a huge uncompressed size.
 - [ ] Inflating never writes more than the declared uncompressed size (a stream that inflates further is rejected).
 - [ ] Downscaled requests (thumbnails) on compressed data still work: the result has the same dimensions as for the uncompressed image at the same target size.
 - [ ] Existing tests still pass; uncompressed files take the same path as before (the subsampled read for thumbnails is unchanged).
-- [ ] Verified by hand on Windows: a zlib+sh XISF (for example saved from PixInsight with zlib + byte shuffling) shows in the Explorer preview pane, as a 256 px thumbnail and in the viewer.
+- [x] Verified by hand on Windows: a zlib+sh XISF (for example saved from PixInsight with zlib + byte shuffling) shows in the Explorer preview pane, as a 256 px thumbnail and in the viewer.
 
 ## Comments
 
@@ -24,3 +24,6 @@ Done. New Core/XisfCompression.cs: XisfCompressionSpec.Parse reads codec:uncompr
 
 23/11/2026, comment:
 Review. Checked all six criteria, CODING_STANDARDS.md and the changed files. There is no spec.md and no GLOSSARY.md in this repo, so no stories or glossary terms could be checked. Findings: (1) FIXED, criterion 2 'a corrupt stream gives null': the Adler-32 trailer was never checked, so a block whose deflate data was valid but whose bytes were corrupt gave wrong pixels instead of null. The trailer is always the last 4 bytes of the block, so InflateZlib now checks it against the restored bytes and requires at least 6 bytes (header plus trailer). The earlier comment said the trailer position was unknown; that is not the case. Tests added: WrongAdler32Trailer_ReturnsNull, MissingAdler32Trailer_ReturnsNull and Adler32_IsCheckedOnLargeBlocks (more than one 5552-byte batch). This assumes PixInsight writes each zlib block as one complete RFC 1950 stream with no padding (compress2 does this); confirm it on Windows with the real file below. (2) FIXED, 'one concept has one implementation': the compressed attachment branch repeated the attachment:<position>:<size> parsing. Both branches now use XisfParser.TryParseAttachment, and behaviour is unchanged. (3) FIXED, comments rule: the catch in XisfCompression.Decompress now says why the exception is ignored. (4) NOT FIXABLE in a test, noted: HugeDeclaredSize_InTinyFile_ReturnsNull cannot prove that nothing is allocated, because an allocation followed by a failed inflate also gives null. The code does check the size before allocating, as the rule asks (it must match the geometry, be <= int.MaxValue and be <= 1032 x the compressed size + 64). No other findings. Uncompressed files take the old path unchanged. Downscaled compressed requests subsample in ProcessRawBuffer. Unshuffle follows the layout in the issue. Build is clean and run-linux-tests.sh passes 282/282. Needs manual verification: (1) a zlib+sh XISF saved from PixInsight shows in the Explorer preview pane; (2) the same file shows as a 256 px thumbnail; (3) it opens in the viewer. These three also confirm that the Adler-32 check accepts real PixInsight files.
+
+23/11/2026, verified:
+Checked by hand on Windows with XisfFastViewerSetup-1.08-test (built from 9fd8ad2) and a real zlib+sh file written by SunAnnotator (UInt8, 3587x2230 RGB, one block, no subblocks): preview pane, 256 px thumbnail and viewer all show it correctly. Files saved by PixInsight 1.9.6 split compressed data into 4 MiB subblocks, which this issue does not handle (see issue 05).
