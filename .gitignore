@@ -21,3 +21,4 @@ bin/Installer/
 
 ## Inno Setup install log
 install_log.txt
+node_modules/

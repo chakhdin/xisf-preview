@@ -112,6 +112,7 @@ namespace XisfPreview.Tests
         }
     }
 
+    [Trait("Category", "WindowsOnly")]
     public class FastViewerTests
     {
         private static byte[] Sample(ushort level) =>
@@ -450,6 +451,7 @@ namespace XisfPreview.Tests
         });
     }
 
+    [Trait("Category", "WindowsOnly")]
     public class HistogramControlTests
     {
         private static Bitmap Paint(Control c)
@@ -689,6 +691,7 @@ namespace XisfPreview.Tests
         });
     }
 
+    [Trait("Category", "WindowsOnly")]
     public class ToolbarAndPreviewControlTests
     {
         [Fact]
