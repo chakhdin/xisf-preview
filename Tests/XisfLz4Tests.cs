@@ -16,8 +16,9 @@ namespace XisfPreview.Tests
             XisfCompression.Decompress(XisfCompressionSpec.Parse($"lz4:{size}"), block);
 
         // Minimal greedy LZ4 block encoder, written from the LZ4 block format description
-        // (github.com/lz4/lz4, doc/lz4_Block_format.md) independently of the decoder, searching 1024 bytes back. It follows
-        // the end-of-block rules: the last 5 bytes are literals and no match starts in the last 12.
+        // (github.com/lz4/lz4, doc/lz4_Block_format.md) independently of the decoder, searching
+        // 1024 bytes back. It follows the end-of-block rules: the last 5 bytes are literals and
+        // no match starts in the last 12.
         internal static byte[] Lz4(byte[] data)
         {
             var output = new List<byte>();
@@ -142,8 +143,6 @@ namespace XisfPreview.Tests
 
         // Image files
 
-        private static string Format(int bps) => bps == 2 ? "UInt16" : "Float32";
-
         private static byte[] Samples(int count, int bps, int seed)
         {
             var rnd = new Random(seed);
@@ -164,7 +163,7 @@ namespace XisfPreview.Tests
         {
             const int w = 13, h = 7, ch = 3;
             byte[] raw = Samples(w * h * ch, bps, bps * 10 + (shuffle ? 1 : 0));
-            string attrs = $"geometry=\"{w}:{h}:{ch}\" sampleFormat=\"{Format(bps)}\" pixelStorage=\"{storage}\"";
+            string attrs = $"geometry=\"{w}:{h}:{ch}\" sampleFormat=\"{XisfCompressionTests.Format(bps)}\" pixelStorage=\"{storage}\"";
             string comp = shuffle ? $"{codec}+sh:{raw.Length}:{bps}" : $"{codec}:{raw.Length}";
             byte[] packed = Lz4(shuffle ? XisfCompressionTests.Shuffle(raw, bps) : raw);
 

@@ -53,7 +53,7 @@ namespace XisfPreview.Tests
             return b;
         }
 
-        private static string Format(int bps) => bps == 1 ? "UInt8" : bps == 2 ? "UInt16" : "Float32";
+        internal static string Format(int bps) => bps == 1 ? "UInt8" : bps == 2 ? "UInt16" : "Float32";
 
         // Float32 samples in 0..1 so the normalized values are comparable.
         private static byte[] Samples(int count, int bps, int seed)

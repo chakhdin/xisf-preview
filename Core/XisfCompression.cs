@@ -88,7 +88,8 @@ namespace XisfExplorerPreview
             }
             catch
             {
-                // A corrupt stream makes DeflateStream throw (the LZ4 decoder checks every bound itself); it means "no preview", like any other bad block.
+                // A corrupt stream makes DeflateStream throw (the LZ4 decoder checks every bound
+                // itself); it means "no preview", like any other bad block.
                 return null;
             }
 
