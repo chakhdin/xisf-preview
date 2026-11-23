@@ -110,168 +110,186 @@ namespace XisfExplorerPreview
                 XNamespace ns = "http://www.pixinsight.com/xisf";
 
                 XElement imgElem = xdoc.Root?.Descendants(ns + "Image").FirstOrDefault();
-                bool isThumbnail = false;
 
                 if (targetDimension > 0 && targetDimension <= 512)
                 {
                     XElement thumbElem = xdoc.Root.Descendants(ns + "Thumbnail").FirstOrDefault();
-                    // A thumbnail we cannot decode (compressed) must not cost us the main image.
-                    if (thumbElem != null && string.IsNullOrEmpty(thumbElem.Attribute("compression")?.Value))
+                    if (thumbElem != null)
                     {
-                        imgElem = thumbElem;
-                        isThumbnail = true;
+                        XisfRawFrame thumbnail = TryLoadThumbnail(stream, reader, thumbElem, ns, targetDimension);
+                        // A thumbnail we cannot decode (unsupported codec, corrupt data) must not
+                        // cost us the main image.
+                        if (thumbnail != null) return thumbnail;
                     }
                 }
 
                 if (imgElem == null) return null;
-
-                string geometry = imgElem.Attribute("geometry")?.Value;
-                string sampleFormat = imgElem.Attribute("sampleFormat")?.Value;
-                string location = imgElem.Attribute("location")?.Value;
-                string pixelStorage = imgElem.Attribute("pixelStorage")?.Value ?? "Planar";
-                string compression = imgElem.Attribute("compression")?.Value;
-                bool bigEndian = string.Equals(imgElem.Attribute("byteOrder")?.Value, "big", StringComparison.OrdinalIgnoreCase);
-
-                // Float32 bounds attribute "lower:upper" (default 0:1); samples are rescaled by it
-                float lowerBound = 0.0f, upperBound = 1.0f;
-                string[] boundParts = imgElem.Attribute("bounds")?.Value?.Split(':');
-                if (boundParts != null && boundParts.Length == 2 &&
-                    float.TryParse(boundParts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float lo) &&
-                    float.TryParse(boundParts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float hi) &&
-                    hi > lo)
-                {
-                    lowerBound = lo;
-                    upperBound = hi;
-                }
-
-                if (string.IsNullOrEmpty(geometry) || string.IsNullOrEmpty(location))
-                    return null;
-
-                int bytesPerSample;
-                if (sampleFormat == "UInt8") bytesPerSample = 1;
-                else if (sampleFormat == "UInt16") bytesPerSample = 2;
-                else if (sampleFormat == "Float32") bytesPerSample = 4;
-                else return null; // unsupported/unknown sample format
-
-                string[] geoParts = geometry.Split(':');
-                if (geoParts.Length < 3) return null;
-
-                if (!int.TryParse(geoParts[0], out int srcWidth) ||
-                    !int.TryParse(geoParts[1], out int srcHeight) ||
-                    !int.TryParse(geoParts[2], out int channels))
-                    return null;
-
-                if (srcWidth <= 0 || srcHeight <= 0 || channels <= 0 ||
-                    srcWidth > MaxDimension || srcHeight > MaxDimension || channels > 4)
-                    return null;
-
-                if ((long)srcWidth * srcHeight > MaxTotalPixels)
-                    return null;
-
-                long requiredBytes = (long)srcWidth * srcHeight * channels * bytesPerSample;
-
-                // A compressed block must restore to exactly the declared geometry; check the
-                // declared size before anything is read or allocated.
-                XisfCompressionSpec compressionSpec = null;
-                if (!string.IsNullOrEmpty(compression))
-                {
-                    compressionSpec = XisfCompressionSpec.Parse(compression);
-                    if (compressionSpec == null || compressionSpec.UncompressedSize != requiredBytes ||
-                        requiredBytes > int.MaxValue)
-                        return null;
-                }
-
-                byte[] pixelData = null;
-
-                if (location.StartsWith("attachment:") && compressionSpec != null)
-                {
-                    if (!TryParseAttachment(location, out long position, out long size) ||
-                        size == 0 || size > int.MaxValue)
-                        return null;
-                    if (stream.CanSeek && position + size > stream.Length)
-                        return null;
-
-                    reader.BaseStream.Seek(position, SeekOrigin.Begin);
-                    pixelData = reader.ReadBytes((int)size);
-                    if (pixelData.Length != size) return null;
-                }
-                else if (location.StartsWith("attachment:"))
-                {
-                    if (!TryParseAttachment(location, out long position, out long size))
-                        return null;
-
-                    long requiredAttachmentBytes = (long)srcWidth * srcHeight * channels * bytesPerSample;
-
-                    // Validate against the declared geometry and the real file length before
-                    // allocating anything, so a tiny file cannot request a huge buffer.
-                    if (size < requiredAttachmentBytes)
-                        return null;
-                    if (stream.CanSeek && position + requiredAttachmentBytes > stream.Length)
-                        return null;
-
-                    int step = ComputeStep(srcWidth, srcHeight, targetDimension);
-
-                    if (step > 1 && stream.CanSeek)
-                    {
-                        // Downscaled request on a seekable stream (shell thumbnails): read only the
-                        // rows that survive the subsampling instead of the whole pixel block.
-                        pixelData = ReadSubsampled(stream, position, srcWidth, srcHeight, channels,
-                            bytesPerSample, pixelStorage, step);
-                        if (pixelData == null) return null;
-
-                        srcWidth /= step;
-                        srcHeight /= step;
-                        targetDimension = 0;
-                    }
-                    else
-                    {
-                        // The full-buffer path needs the whole block in one array
-                        if (requiredAttachmentBytes > int.MaxValue) return null;
-                        reader.BaseStream.Seek(position, SeekOrigin.Begin);
-                        pixelData = reader.ReadBytes((int)requiredAttachmentBytes);
-                    }
-                }
-                else if (location.StartsWith("inline:base64"))
-                {
-                    // Only direct text nodes: Property/FITSKeyword children carry text that is not pixel data
-                    pixelData = Convert.FromBase64String(string.Concat(imgElem.Nodes().OfType<XText>().Select(t => t.Value)).Trim());
-                }
-                else if (location == "embedded")
-                {
-                    XElement dataElem = imgElem.Element(ns + "Data") ?? imgElem.Element("Data");
-                    if (dataElem != null && dataElem.Attribute("encoding")?.Value == "base64")
-                    {
-                        pixelData = Convert.FromBase64String(dataElem.Value.Trim());
-                    }
-                }
-
-                if (pixelData == null) return null;
-
-                if (compressionSpec != null)
-                {
-                    pixelData = XisfCompression.Decompress(compressionSpec, pixelData);
-                    if (pixelData == null) return null;
-                }
-
-                requiredBytes = (long)srcWidth * srcHeight * channels * bytesPerSample;
-                if (pixelData.LongLength < requiredBytes) return null;
-
-                if (bigEndian && bytesPerSample > 1)
-                {
-                    // Samples are decoded as little endian, so swap each one in place
-                    for (long i = 0; i + bytesPerSample <= pixelData.LongLength; i += bytesPerSample)
-                        Array.Reverse(pixelData, (int)i, bytesPerSample);
-                }
-
-                XisfRawFrame result = ProcessRawBuffer(srcWidth, srcHeight, channels, sampleFormat, pixelStorage, pixelData, isThumbnail, targetDimension, lowerBound, upperBound);
-                StfEngine.ComputeAutoStf(result, isThumbnail);
-                return result;
+                return LoadImage(stream, reader, imgElem, ns, false, targetDimension);
             }
             catch
             {
                 // Any malformed/truncated/corrupt file falls back to "no preview" rather than propagating.
                 return null;
             }
+        }
+
+        private static XisfRawFrame TryLoadThumbnail(Stream stream, BinaryReader reader, XElement thumbElem, XNamespace ns, int targetDimension)
+        {
+            try
+            {
+                return LoadImage(stream, reader, thumbElem, ns, true, targetDimension);
+            }
+            catch
+            {
+                // A broken thumbnail only means the caller uses the main image instead.
+                return null;
+            }
+        }
+
+        // Decodes one <Image> or <Thumbnail> element; null when it cannot be decoded.
+        private static XisfRawFrame LoadImage(Stream stream, BinaryReader reader, XElement imgElem, XNamespace ns, bool isThumbnail, int targetDimension)
+        {
+            string geometry = imgElem.Attribute("geometry")?.Value;
+            string sampleFormat = imgElem.Attribute("sampleFormat")?.Value;
+            string location = imgElem.Attribute("location")?.Value;
+            string pixelStorage = imgElem.Attribute("pixelStorage")?.Value ?? "Planar";
+            string compression = imgElem.Attribute("compression")?.Value;
+            bool bigEndian = string.Equals(imgElem.Attribute("byteOrder")?.Value, "big", StringComparison.OrdinalIgnoreCase);
+
+            // Float32 bounds attribute "lower:upper" (default 0:1); samples are rescaled by it
+            float lowerBound = 0.0f, upperBound = 1.0f;
+            string[] boundParts = imgElem.Attribute("bounds")?.Value?.Split(':');
+            if (boundParts != null && boundParts.Length == 2 &&
+                float.TryParse(boundParts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float lo) &&
+                float.TryParse(boundParts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float hi) &&
+                hi > lo)
+            {
+                lowerBound = lo;
+                upperBound = hi;
+            }
+
+            if (string.IsNullOrEmpty(geometry) || string.IsNullOrEmpty(location))
+                return null;
+
+            int bytesPerSample;
+            if (sampleFormat == "UInt8") bytesPerSample = 1;
+            else if (sampleFormat == "UInt16") bytesPerSample = 2;
+            else if (sampleFormat == "Float32") bytesPerSample = 4;
+            else return null; // unsupported/unknown sample format
+
+            string[] geoParts = geometry.Split(':');
+            if (geoParts.Length < 3) return null;
+
+            if (!int.TryParse(geoParts[0], out int srcWidth) ||
+                !int.TryParse(geoParts[1], out int srcHeight) ||
+                !int.TryParse(geoParts[2], out int channels))
+                return null;
+
+            if (srcWidth <= 0 || srcHeight <= 0 || channels <= 0 ||
+                srcWidth > MaxDimension || srcHeight > MaxDimension || channels > 4)
+                return null;
+
+            if ((long)srcWidth * srcHeight > MaxTotalPixels)
+                return null;
+
+            long requiredBytes = (long)srcWidth * srcHeight * channels * bytesPerSample;
+
+            // A compressed block must restore to exactly the declared geometry; check the
+            // declared size before anything is read or allocated.
+            XisfCompressionSpec compressionSpec = null;
+            if (!string.IsNullOrEmpty(compression))
+            {
+                compressionSpec = XisfCompressionSpec.Parse(compression);
+                if (compressionSpec == null || compressionSpec.UncompressedSize != requiredBytes ||
+                    requiredBytes > int.MaxValue)
+                    return null;
+            }
+
+            byte[] pixelData = null;
+
+            if (location.StartsWith("attachment:") && compressionSpec != null)
+            {
+                if (!TryParseAttachment(location, out long position, out long size) ||
+                    size == 0 || size > int.MaxValue)
+                    return null;
+                if (stream.CanSeek && position + size > stream.Length)
+                    return null;
+
+                reader.BaseStream.Seek(position, SeekOrigin.Begin);
+                pixelData = reader.ReadBytes((int)size);
+                if (pixelData.Length != size) return null;
+            }
+            else if (location.StartsWith("attachment:"))
+            {
+                if (!TryParseAttachment(location, out long position, out long size))
+                    return null;
+
+                long requiredAttachmentBytes = (long)srcWidth * srcHeight * channels * bytesPerSample;
+
+                // Validate against the declared geometry and the real file length before
+                // allocating anything, so a tiny file cannot request a huge buffer.
+                if (size < requiredAttachmentBytes)
+                    return null;
+                if (stream.CanSeek && position + requiredAttachmentBytes > stream.Length)
+                    return null;
+
+                int step = ComputeStep(srcWidth, srcHeight, targetDimension);
+
+                if (step > 1 && stream.CanSeek)
+                {
+                    // Downscaled request on a seekable stream (shell thumbnails): read only the
+                    // rows that survive the subsampling instead of the whole pixel block.
+                    pixelData = ReadSubsampled(stream, position, srcWidth, srcHeight, channels,
+                        bytesPerSample, pixelStorage, step);
+                    if (pixelData == null) return null;
+
+                    srcWidth /= step;
+                    srcHeight /= step;
+                    targetDimension = 0;
+                }
+                else
+                {
+                    // The full-buffer path needs the whole block in one array
+                    if (requiredAttachmentBytes > int.MaxValue) return null;
+                    reader.BaseStream.Seek(position, SeekOrigin.Begin);
+                    pixelData = reader.ReadBytes((int)requiredAttachmentBytes);
+                }
+            }
+            else if (location.StartsWith("inline:base64"))
+            {
+                // Only direct text nodes: Property/FITSKeyword children carry text that is not pixel data
+                pixelData = Convert.FromBase64String(string.Concat(imgElem.Nodes().OfType<XText>().Select(t => t.Value)).Trim());
+            }
+            else if (location == "embedded")
+            {
+                XElement dataElem = imgElem.Element(ns + "Data") ?? imgElem.Element("Data");
+                if (dataElem != null && dataElem.Attribute("encoding")?.Value == "base64")
+                {
+                    pixelData = Convert.FromBase64String(dataElem.Value.Trim());
+                }
+            }
+
+            if (pixelData == null) return null;
+
+            if (compressionSpec != null)
+            {
+                pixelData = XisfCompression.Decompress(compressionSpec, pixelData);
+                if (pixelData == null) return null;
+            }
+
+            requiredBytes = (long)srcWidth * srcHeight * channels * bytesPerSample;
+            if (pixelData.LongLength < requiredBytes) return null;
+
+            if (bigEndian && bytesPerSample > 1)
+            {
+                // Samples are decoded as little endian, so swap each one in place
+                for (long i = 0; i + bytesPerSample <= pixelData.LongLength; i += bytesPerSample)
+                    Array.Reverse(pixelData, (int)i, bytesPerSample);
+            }
+
+            XisfRawFrame result = ProcessRawBuffer(srcWidth, srcHeight, channels, sampleFormat, pixelStorage, pixelData, isThumbnail, targetDimension, lowerBound, upperBound);
+            StfEngine.ComputeAutoStf(result, isThumbnail);
+            return result;
         }
 
         // Parses "attachment:<position>:<size>"; false unless both are non-negative numbers.
