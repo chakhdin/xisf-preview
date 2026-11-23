@@ -183,29 +183,21 @@ namespace XisfExplorerPreview
 
                 byte[] pixelData = null;
 
-                if (compressionSpec != null && location.StartsWith("attachment:"))
+                if (location.StartsWith("attachment:") && compressionSpec != null)
                 {
-                    string[] locParts = location.Split(':');
-                    if (locParts.Length < 3) return null;
-                    if (!long.TryParse(locParts[1], out long position) ||
-                        !long.TryParse(locParts[2], out long size) ||
-                        position < 0 || size <= 0 || size > int.MaxValue)
+                    if (!TryParseAttachment(location, out long position, out long size) ||
+                        size == 0 || size > int.MaxValue)
                         return null;
                     if (stream.CanSeek && position + size > stream.Length)
                         return null;
 
                     reader.BaseStream.Seek(position, SeekOrigin.Begin);
-                    byte[] compressed = reader.ReadBytes((int)size);
-                    if (compressed.Length != size) return null;
-                    pixelData = compressed;
+                    pixelData = reader.ReadBytes((int)size);
+                    if (pixelData.Length != size) return null;
                 }
                 else if (location.StartsWith("attachment:"))
                 {
-                    string[] locParts = location.Split(':');
-                    if (locParts.Length < 3) return null;
-                    if (!long.TryParse(locParts[1], out long position) ||
-                        !long.TryParse(locParts[2], out long size) ||
-                        position < 0 || size < 0)
+                    if (!TryParseAttachment(location, out long position, out long size))
                         return null;
 
                     long requiredAttachmentBytes = (long)srcWidth * srcHeight * channels * bytesPerSample;
@@ -280,6 +272,17 @@ namespace XisfExplorerPreview
                 // Any malformed/truncated/corrupt file falls back to "no preview" rather than propagating.
                 return null;
             }
+        }
+
+        // Parses "attachment:<position>:<size>"; false unless both are non-negative numbers.
+        private static bool TryParseAttachment(string location, out long position, out long size)
+        {
+            position = size = 0;
+            string[] locParts = location.Split(':');
+            return locParts.Length >= 3 &&
+                long.TryParse(locParts[1], out position) &&
+                long.TryParse(locParts[2], out size) &&
+                position >= 0 && size >= 0;
         }
 
         // Subsampling step for a downscaled request. The step follows the shorter side, so an

@@ -81,6 +81,7 @@ namespace XisfExplorerPreview
             }
             catch
             {
+                // A corrupt stream makes DeflateStream throw; it means "no preview", like any other bad block.
                 return null;
             }
 
@@ -89,10 +90,11 @@ namespace XisfExplorerPreview
         }
 
         // zlib stream (RFC 1950): 2-byte header, raw deflate data, Adler-32 trailer.
-        // Fills exactly 'size' bytes and rejects streams that end early or inflate further.
+        // Fills exactly 'size' bytes, rejects streams that end early or inflate further, and
+        // checks the restored bytes against the Adler-32 in the last 4 bytes of the block.
         private static byte[] InflateZlib(byte[] compressed, int size)
         {
-            if (compressed.Length < 2) return null;
+            if (compressed.Length < 6) return null;
             int cmf = compressed[0], flg = compressed[1];
             if ((cmf & 0x0F) != 8 || (cmf >> 4) > 7 || ((cmf << 8) | flg) % 31 != 0 || (flg & 0x20) != 0)
                 return null;
@@ -111,7 +113,32 @@ namespace XisfExplorerPreview
 
                 if (inflater.Read(new byte[1], 0, 1) > 0) return null; // stream longer than declared
             }
-            return output;
+
+            int t = compressed.Length - 4;
+            uint stored = ((uint)compressed[t] << 24) | ((uint)compressed[t + 1] << 16) |
+                          ((uint)compressed[t + 2] << 8) | compressed[t + 3];
+            return Adler32(output) == stored ? output : null;
+        }
+
+        // Adler-32 (RFC 1950). 5552 is the largest batch whose sums cannot overflow 32 bits
+        // before the modulo.
+        private static uint Adler32(byte[] data)
+        {
+            const uint Mod = 65521;
+            uint a = 1, b = 0;
+            int i = 0;
+            while (i < data.Length)
+            {
+                int end = Math.Min(data.Length, i + 5552);
+                for (; i < end; i++)
+                {
+                    a += data[i];
+                    b += a;
+                }
+                a %= Mod;
+                b %= Mod;
+            }
+            return (b << 16) | a;
         }
 
         // Inverse of XISF byte shuffling: the stored block holds the first byte of every item,

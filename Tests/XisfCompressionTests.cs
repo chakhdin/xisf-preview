@@ -220,6 +220,31 @@ namespace XisfPreview.Tests
         }
 
         [Fact]
+        public void WrongAdler32Trailer_ReturnsNull()
+        {
+            // The deflate data inflates cleanly, but the checksum of the restored bytes differs.
+            byte[] packed = Zlib(Raw16);
+            packed[packed.Length - 1] ^= 0x01;
+            Assert.Null(Load(U16File("zlib:16", packed)));
+        }
+
+        [Fact]
+        public void MissingAdler32Trailer_ReturnsNull()
+        {
+            byte[] packed = Zlib(Raw16);
+            Assert.Null(Load(U16File("zlib:16", packed.Take(packed.Length - 4).ToArray())));
+        }
+
+        [Fact]
+        public void Adler32_IsCheckedOnLargeBlocks()
+        {
+            // More than one 5552-byte Adler-32 batch, with high byte values
+            byte[] raw = Enumerable.Range(0, 300 * 100 * 2).Select(i => (byte)(255 - i % 7)).ToArray();
+            XisfRawFrame f = Load(Xisf.Attached($"geometry=\"300:100:1\" sampleFormat=\"UInt16\" compression=\"zlib:{raw.Length}\"", Zlib(raw)));
+            Assert.NotNull(f);
+        }
+
+        [Fact]
         public void BadZlibHeader_ReturnsNull()
         {
             byte[] packed = Zlib(Raw16);
