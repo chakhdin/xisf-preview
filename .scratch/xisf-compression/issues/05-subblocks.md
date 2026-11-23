@@ -11,7 +11,7 @@ What the XISF 1.0 specification says (section 10.6, read 23/11/2026; quoted):
 
 **Blocked by:** 01, 02, 03
 
-**Status:** needs-verification
+**Status:** done
 
 - [ ] One implementation in `Core/XisfCompression.cs` serves images and thumbnails: parse `subblocks`, check the sums before allocating, decompress each subblock into its slice of the output buffer with the existing zlib and LZ4 decoders (each subblock checked to give exactly ui bytes), copy subblocks with ci = ui as they are, then unshuffle once. Without the attribute the path is exactly as today.
 - [ ] The allocation cap still holds: nothing big is allocated when the declared sizes are out of proportion to the stored bytes (per subblock, the codec's expansion bound applies to ci).
@@ -19,7 +19,7 @@ What the XISF 1.0 specification says (section 10.6, read 23/11/2026; quoted):
 - [ ] Tests build XISF files with 2 and 3 subblocks for zlib, zlib+sh, lz4 and lz4hc+sh (an item size of 2 or 4, with subblock boundaries that do not fall on item boundaries), one file mixing a compressed and an uncompressed subblock, and a compressed thumbnail with subblocks; decoded pixels match the uncompressed originals, at full size and downscaled.
 - [ ] Bad input gives null (for thumbnails: falls back to the main image as in 03), never an exception: malformed attribute (missing comma, empty pair, non-numeric, zero pairs), sums that do not match, a subblock decompressing to more or fewer bytes than ui, a subblock running past the end of the block, a corrupt subblock. Tests cover each case.
 - [ ] Existing tests still pass.
-- [ ] Verified by hand on Windows: PixInsight 1.9.6 files `c:\Download\Image011.xisf` (zlib), `Image012.xisf` (lz4), `Image013.xisf` (lz4hc) show in the Explorer preview pane, as thumbnails and in the viewer; `Image01.xisf` (zstd) still gives the generic icon.
+- [x] Verified by hand on Windows: PixInsight 1.9.6 files `c:\Download\Image011.xisf` (zlib), `Image012.xisf` (lz4), `Image013.xisf` (lz4hc) show in the Explorer preview pane, as thumbnails and in the viewer; `Image01.xisf` (zstd) still gives the generic icon.
 
 ## Comments
 
@@ -28,3 +28,6 @@ Done. Core/XisfCompression.cs: XisfCompressionSpec.Parse(compression, subblocks)
 
 23/11/2026, comment:
 Review (23/11/2026). Checked every acceptance criterion, CODING_STANDARDS.md (every rule, every changed file) and the XISF 10.6 text quoted in the issue. There is no .scratch/xisf-compression/spec.md and no GLOSSARY.md, so there were no spec stories or glossary terms to check. The code meets the criteria. It has one path in XisfCompression.Decompress for images and thumbnails, and without subblocks it behaves exactly as before: same expansion bound, no stored shortcut, same decoders. Parse rejects u sums that do not match. Decompress checks the c sum and the per-subblock expansion bound (stored subblocks are bounded by ci) before allocating. The decoders write into slices of one buffer, LZ4 matches cannot reach back before the subblock start, each zlib subblock checks its own Adler-32, and Unshuffle runs once. subblocks is read from the same element as compression. The catch comment is still accurate. Findings, all in tests and all fixed in Tests/XisfSubblockTests.cs: (1) the 3-subblock split 1001/6667 put its second boundary at byte 7668, which is a multiple of both 2 and 4, so it fell on an item boundary. It is now 1001/6668 (boundaries at 1001 and 7669, neither on an item boundary). (2) The mixed stored/compressed test checked only full size, but the criterion asks for full size and downscaled. It now also checks target 16 against the uncompressed original. (3) The compressed thumbnail with subblocks was only checked at full size. It is now also checked at target 8, which downscales the thumbnail. Each check asserts that the result is the thumbnail and that it matches the uncompressed thumbnail. No code findings. Build is clean, and run-linux-tests.sh passes 383/383. Needs manual verification (unchanged): (1) on Windows, the PixInsight 1.9.6 files c:\Download\Image011.xisf (zlib), Image012.xisf (lz4) and Image013.xisf (lz4hc) show in the Explorer preview pane, as thumbnails and in the viewer; (2) Image01.xisf (zstd) still gives the generic icon.
+
+23/11/2026, verified:
+Checked on Windows with XisfFastViewerSetup-1.08-test built from 06dce29, using PixInsight 1.9.6 files (1365x1024x4 UInt8 RGB, main image in two subblocks, 400x299 thumbnail with the same codec): Image011 (zlib), Image012 (lz4) and Image013 (lz4hc) show their thumbnails in Explorer and the preview pane works; Image01 (zstd) gives no preview and the generic icon, as designed (zstd is unsupported). Headless on the same build: main image 1365x1024 and thumbnail 133x99 at 96 px and 400x299 at 256 px for the three files, picture checked.

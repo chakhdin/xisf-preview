@@ -6,13 +6,13 @@ First check in the XISF 1.0 specification whether lz4 data is the raw LZ4 block 
 
 **Blocked by:** 01
 
-**Status:** needs-verification
+**Status:** done
 
 - [ ] Tests decode LZ4 data with known output, including literal-only data, overlapping matches (offset smaller than match length) and long literal and match lengths (length bytes of 255). Test data is built in the test: a small LZ4 encoder in the test project or hand-written byte arrays, documented where they come from.
 - [ ] Tests build small lz4 and lz4+sh XISF files (UInt16 and Float32) and check the decoded pixels against the uncompressed originals.
 - [ ] Corrupt input never reads or writes outside the buffers: an offset before the start of the output, a length past the end of the input or output, or output shorter or longer than the declared uncompressed size gives null, never an exception escaping the parser. Tests cover each case.
 - [ ] Existing tests still pass.
-- [ ] Verified by hand on Windows: an lz4 or lz4hc XISF (saved from PixInsight with that codec) shows in the Explorer preview pane, as a 256 px thumbnail and in the viewer.
+- [x] Verified by hand on Windows: an lz4 or lz4hc XISF (saved from PixInsight with that codec) shows in the Explorer preview pane, as a 256 px thumbnail and in the viewer.
 
 ## Comments
 
@@ -24,3 +24,6 @@ Done. Core/XisfCompression.cs: IsSupportedCodec accepts lz4 and lz4hc, with or w
 
 23/11/2026, comment:
 Review: checked every acceptance criterion, CODING_STANDARDS.md rule and the decoder. There is no .scratch/xisf-compression/spec.md and no GLOSSARY.md, so the only spec reference is GitHub #1, which I could not check here. The decoder is correct: every literal length, match length and offset is checked against the input and output, offset 0 and offsets before the output start are rejected, the input cannot end inside a length extension or an offset, and the output must be exactly the declared size. The 255x + 64 cap is a true upper bound for LZ4 blocks. Criteria 1-4 are covered by tests. Findings, all fixed: (1) the catch comment in Decompress was one overlong line, unlike the rest of the file; wrapped. (2) The encoder comment in Tests/XisfLz4Tests.cs was overlong; wrapped. (3) Tests/XisfLz4Tests.cs had its own copy of the sample-format name helper; it now reuses XisfCompressionTests.Format (made internal). Not fixed, note only: HugeDeclaredSize_InTinyFile_ReturnsNull would still pass without the LZ4 ratio cap, because the decoder then returns null after allocating. The cap is only covered indirectly: AllZeroImage_Decodes shows the cap is not too tight, and removing the lz4 cases from MaxUncompressedSize makes every lz4 test fail. Behaviour is unchanged. Build is clean, and run-linux-tests.sh passes 314/314. Needs manual verification (unchanged): (1) an lz4 or lz4hc XISF saved from PixInsight with that codec shows in the Explorer preview pane; (2) the same file shows as a 256 px thumbnail; (3) it opens in the viewer.
+
+23/11/2026, verified:
+Checked on Windows with XisfFastViewerSetup-1.08-test built from 06dce29, using PixInsight 1.9.6 files (1365x1024x4 UInt8 RGB, main image in two subblocks, 400x299 thumbnail with the same codec): Image011 (zlib), Image012 (lz4) and Image013 (lz4hc) show their thumbnails in Explorer and the preview pane works; Image01 (zstd) gives no preview and the generic icon, as designed (zstd is unsupported). Headless on the same build: main image 1365x1024 and thumbnail 133x99 at 96 px and 400x299 at 256 px for the three files, picture checked.

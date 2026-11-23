@@ -4,12 +4,12 @@
 
 **Blocked by:** 01, 02
 
-**Status:** needs-verification
+**Status:** done
 
 - [ ] Tests build XISF files with a compressed thumbnail and a different main image and check that small requests return the thumbnail and large requests the main image.
 - [ ] Tests check that a zstd thumbnail, an unknown codec and a corrupt compressed thumbnail fall back to the main image.
 - [ ] Existing tests still pass.
-- [ ] Verified by hand on Windows: an XISF with a compressed thumbnail shows its thumbnail in Explorer at 96 and 256 px.
+- [x] Verified by hand on Windows: an XISF with a compressed thumbnail shows its thumbnail in Explorer at 96 and 256 px.
 
 ## Comments
 
@@ -18,3 +18,6 @@ Done. Core/XisfParser.cs: the per-element decoding (geometry, compression spec a
 
 23/11/2026, comment:
 Review: checked all four criteria, the issue text (the cited source is GitHub #1; there is no .scratch/xisf-compression/spec.md, so there were no spec stories to check) and every CODING_STANDARDS rule against Core/XisfParser.cs and Tests/XisfThumbnailTests.cs. Criteria 1-3 are met. Tests build a 64x48 main image and a different 8x6 thumbnail. Small requests return the compressed thumbnail for all codecs, inline and attached, and requests of 0, 513 and 1024 return the main image. zstd, unknown codec, corrupt, truncated and wrongly sized thumbnails fall back to the main image. Each test fails against the old code. Build is clean, and run-linux-tests.sh passes 338/338. Findings: (1) the LoadImage doc comment said it returns null when an element cannot be decoded, but it can also throw (for example on bad base64), which TryLoadThumbnail and LoadRawFrame catch. Fixed: the comment now says so. No other findings; the empty catches have comments and the member order and naming match the file. Could not verify here (Linux container, no Explorer): criterion 4. Needs manual verification: (1) on Windows, an XISF with a compressed thumbnail (zlib or lz4, for example from PixInsight) shows its thumbnail in Explorer at 96 and 256 px; (2) an XISF with a zstd thumbnail shows the main image as its thumbnail. Status stays needs-verification.
+
+23/11/2026, verified:
+Checked on Windows with XisfFastViewerSetup-1.08-test built from 06dce29, using PixInsight 1.9.6 files (1365x1024x4 UInt8 RGB, main image in two subblocks, 400x299 thumbnail with the same codec): Image011 (zlib), Image012 (lz4) and Image013 (lz4hc) show their thumbnails in Explorer and the preview pane works; Image01 (zstd) gives no preview and the generic icon, as designed (zstd is unsupported). Headless on the same build: main image 1365x1024 and thumbnail 133x99 at 96 px and 400x299 at 256 px for the three files, picture checked.
