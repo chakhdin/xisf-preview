@@ -154,6 +154,7 @@ namespace XisfExplorerPreview
             string location = imgElem.Attribute("location")?.Value;
             string pixelStorage = imgElem.Attribute("pixelStorage")?.Value ?? "Planar";
             string compression = imgElem.Attribute("compression")?.Value;
+            string subblocks = imgElem.Attribute("subblocks")?.Value;
             bool bigEndian = string.Equals(imgElem.Attribute("byteOrder")?.Value, "big", StringComparison.OrdinalIgnoreCase);
 
             // Float32 bounds attribute "lower:upper" (default 0:1); samples are rescaled by it
@@ -199,7 +200,7 @@ namespace XisfExplorerPreview
             XisfCompressionSpec compressionSpec = null;
             if (!string.IsNullOrEmpty(compression))
             {
-                compressionSpec = XisfCompressionSpec.Parse(compression);
+                compressionSpec = XisfCompressionSpec.Parse(compression, subblocks);
                 if (compressionSpec == null || compressionSpec.UncompressedSize != requiredBytes ||
                     requiredBytes > int.MaxValue)
                     return null;
