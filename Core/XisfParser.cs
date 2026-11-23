@@ -144,7 +144,7 @@ namespace XisfExplorerPreview
                     upperBound = hi;
                 }
 
-                if (string.IsNullOrEmpty(geometry) || string.IsNullOrEmpty(location) || !string.IsNullOrEmpty(compression))
+                if (string.IsNullOrEmpty(geometry) || string.IsNullOrEmpty(location))
                     return null;
 
                 int bytesPerSample;
@@ -168,9 +168,38 @@ namespace XisfExplorerPreview
                 if ((long)srcWidth * srcHeight > MaxTotalPixels)
                     return null;
 
+                long requiredBytes = (long)srcWidth * srcHeight * channels * bytesPerSample;
+
+                // A compressed block must restore to exactly the declared geometry; check the
+                // declared size before anything is read or allocated.
+                XisfCompressionSpec compressionSpec = null;
+                if (!string.IsNullOrEmpty(compression))
+                {
+                    compressionSpec = XisfCompressionSpec.Parse(compression);
+                    if (compressionSpec == null || compressionSpec.UncompressedSize != requiredBytes ||
+                        requiredBytes > int.MaxValue)
+                        return null;
+                }
+
                 byte[] pixelData = null;
 
-                if (location.StartsWith("attachment:"))
+                if (compressionSpec != null && location.StartsWith("attachment:"))
+                {
+                    string[] locParts = location.Split(':');
+                    if (locParts.Length < 3) return null;
+                    if (!long.TryParse(locParts[1], out long position) ||
+                        !long.TryParse(locParts[2], out long size) ||
+                        position < 0 || size <= 0 || size > int.MaxValue)
+                        return null;
+                    if (stream.CanSeek && position + size > stream.Length)
+                        return null;
+
+                    reader.BaseStream.Seek(position, SeekOrigin.Begin);
+                    byte[] compressed = reader.ReadBytes((int)size);
+                    if (compressed.Length != size) return null;
+                    pixelData = compressed;
+                }
+                else if (location.StartsWith("attachment:"))
                 {
                     string[] locParts = location.Split(':');
                     if (locParts.Length < 3) return null;
@@ -226,7 +255,13 @@ namespace XisfExplorerPreview
 
                 if (pixelData == null) return null;
 
-                long requiredBytes = (long)srcWidth * srcHeight * channels * bytesPerSample;
+                if (compressionSpec != null)
+                {
+                    pixelData = XisfCompression.Decompress(compressionSpec, pixelData);
+                    if (pixelData == null) return null;
+                }
+
+                requiredBytes = (long)srcWidth * srcHeight * channels * bytesPerSample;
                 if (pixelData.LongLength < requiredBytes) return null;
 
                 if (bigEndian && bytesPerSample > 1)
