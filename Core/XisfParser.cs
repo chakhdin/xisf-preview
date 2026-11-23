@@ -146,7 +146,7 @@ namespace XisfExplorerPreview
             }
         }
 
-        // Decodes one <Image> or <Thumbnail> element; null when it cannot be decoded.
+        // Decodes one <Image> or <Thumbnail> element; null (or an exception) when it cannot be decoded.
         private static XisfRawFrame LoadImage(Stream stream, BinaryReader reader, XElement imgElem, XNamespace ns, bool isThumbnail, int targetDimension)
         {
             string geometry = imgElem.Attribute("geometry")?.Value;
