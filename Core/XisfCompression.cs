@@ -50,17 +50,22 @@ namespace XisfExplorerPreview
     // truncated stream, wrong output length) yields null instead of an exception.
     public static class XisfCompression
     {
-        public static bool IsSupportedCodec(string codec) => codec == "zlib";
+        public static bool IsSupportedCodec(string codec) => codec == "zlib" || codec == "lz4" || codec == "lz4hc";
 
         // Deflate cannot expand more than about 1032:1, so a block declaring more than that
         // is rejected before its output buffer is allocated.
         private const long MaxZlibRatio = 1032;
+
+        // An LZ4 block restores at most 255 bytes per input byte (one length byte of 255).
+        private const long MaxLz4Ratio = 255;
 
         private static long MaxUncompressedSize(string codec, long compressedLength)
         {
             switch (codec)
             {
                 case "zlib": return compressedLength * MaxZlibRatio + 64;
+                case "lz4":
+                case "lz4hc": return compressedLength * MaxLz4Ratio + 64;
                 default: return 0;
             }
         }
@@ -76,12 +81,14 @@ namespace XisfExplorerPreview
                 switch (spec.Codec)
                 {
                     case "zlib": data = InflateZlib(compressed, (int)spec.UncompressedSize); break;
+                    case "lz4":
+                    case "lz4hc": data = DecodeLz4Block(compressed, (int)spec.UncompressedSize); break;
                     default: return null;
                 }
             }
             catch
             {
-                // A corrupt stream makes DeflateStream throw; it means "no preview", like any other bad block.
+                // A corrupt stream makes DeflateStream throw (the LZ4 decoder checks every bound itself); it means "no preview", like any other bad block.
                 return null;
             }
 
@@ -118,6 +125,59 @@ namespace XisfExplorerPreview
             uint stored = ((uint)compressed[t] << 24) | ((uint)compressed[t + 1] << 16) |
                           ((uint)compressed[t + 2] << 8) | compressed[t + 3];
             return Adler32(output) == stored ? output : null;
+        }
+
+        // LZ4 block format (lz4 and lz4hc share it; XISF stores blocks, not LZ4 frames).
+        // Each sequence is a token (literal length high nibble, match length - 4 low nibble),
+        // extra literal length bytes, the literals, a 2-byte little-endian offset and extra
+        // match length bytes; a nibble of 15 continues with bytes added until one is below 255.
+        // The last sequence has literals only. Every length and offset is checked against the
+        // input and the output, and the output must be exactly 'size' bytes.
+        private static byte[] DecodeLz4Block(byte[] input, int size)
+        {
+            byte[] output = new byte[size];
+            int ip = 0, op = 0;
+            while (ip < input.Length)
+            {
+                int token = input[ip++];
+
+                long literals = token >> 4;
+                if (literals == 15 && !ReadLz4Length(input, ref ip, ref literals)) return null;
+                if (literals > input.Length - ip || literals > size - op) return null;
+                Buffer.BlockCopy(input, ip, output, op, (int)literals);
+                ip += (int)literals;
+                op += (int)literals;
+
+                if (ip == input.Length) break; // last sequence: literals only
+
+                if (input.Length - ip < 2) return null;
+                int offset = input[ip] | (input[ip + 1] << 8);
+                ip += 2;
+                if (offset == 0 || offset > op) return null;
+
+                long match = token & 0x0F;
+                if (match == 15 && !ReadLz4Length(input, ref ip, ref match)) return null;
+                match += 4;
+                if (match > size - op) return null;
+
+                // Byte by byte, so an offset shorter than the match repeats the recent bytes.
+                int from = op - offset;
+                for (int end = op + (int)match; op < end; ) output[op++] = output[from++];
+            }
+            return op == size ? output : null;
+        }
+
+        // Adds the LZ4 length extension bytes to 'length'; false when the input ends first.
+        private static bool ReadLz4Length(byte[] input, ref int ip, ref long length)
+        {
+            int b;
+            do
+            {
+                if (ip >= input.Length) return false;
+                b = input[ip++];
+                length += b;
+            } while (b == 255);
+            return true;
         }
 
         // Adler-32 (RFC 1950). 5552 is the largest batch whose sums cannot overflow 32 bits
