@@ -60,7 +60,7 @@ namespace XisfPreview.Tests
 
         // Uncompressed lengths with boundaries that do not fall on item boundaries.
         private static int[] Split(int total, int count) =>
-            count == 2 ? new[] { 4097, total - 4097 } : new[] { 1001, 6667, total - 7668 };
+            count == 2 ? new[] { 4097, total - 4097 } : new[] { 1001, 6668, total - 7669 };
 
         private static byte[] AttachedFile(string codec, int bps, byte[] raw, int count, params int[] stored)
         {
@@ -101,11 +101,18 @@ namespace XisfPreview.Tests
         public void MixedStoredAndCompressedSubblocks_Decode(string codec, int storedIndex)
         {
             byte[] raw = Samples(W * H * Ch, 2, 5);
-            XisfRawFrame expected = Load(Xisf.Attached(Attrs(2), raw));
-            XisfRawFrame actual = Load(AttachedFile(codec, 2, raw, 3, storedIndex));
+            byte[] file = AttachedFile(codec, 2, raw, 3, storedIndex);
 
-            Assert.NotNull(actual);
-            Assert.Equal(expected.NormalizedData, actual.NormalizedData);
+            foreach (int target in new[] { 0, 16 })
+            {
+                XisfRawFrame expected = Load(Xisf.Attached(Attrs(2), raw), target);
+                XisfRawFrame actual = Load(file, target);
+
+                Assert.NotNull(actual);
+                Assert.Equal(expected.Width, actual.Width);
+                Assert.Equal(expected.Height, actual.Height);
+                Assert.Equal(expected.NormalizedData, actual.NormalizedData);
+            }
         }
 
         [Theory]
@@ -145,14 +152,22 @@ namespace XisfPreview.Tests
         public void CompressedThumbnailWithSubblocks_UsedForSmallRequests(string codec)
         {
             byte[] packed = Pack(codec, ThumbRaw, 2, new[] { 333, 401, ThumbRaw.Length - 734 }, out string sub);
-            XisfRawFrame expected = Load(WithThumbnail("", ThumbRaw), 96);
-            XisfRawFrame actual = Load(WithThumbnail(
-                $"compression=\"{Compression(codec, ThumbRaw.Length, 2)}\" subblocks=\"{sub}\"", packed), 96);
+            byte[] file = WithThumbnail(
+                $"compression=\"{Compression(codec, ThumbRaw.Length, 2)}\" subblocks=\"{sub}\"", packed);
 
-            Assert.NotNull(actual);
-            Assert.Equal(16, actual.Width);
-            Assert.Equal(12, actual.Height);
-            Assert.Equal(expected.NormalizedData, actual.NormalizedData);
+            // 96: the thumbnail at full size; 8: the thumbnail downscaled.
+            foreach (int target in new[] { 96, 8 })
+            {
+                XisfRawFrame expected = Load(WithThumbnail("", ThumbRaw), target);
+                XisfRawFrame actual = Load(file, target);
+
+                Assert.NotNull(actual);
+                Assert.True(actual.Width <= 16 && actual.Height <= 12); // the thumbnail, not the 64x48 image
+                Assert.Equal(expected.Width, actual.Width);
+                Assert.Equal(expected.Height, actual.Height);
+                Assert.Equal(expected.NormalizedData, actual.NormalizedData);
+            }
+            Assert.Equal(16, Load(file, 96).Width);
         }
 
         // Each case: a subblocks attribute and the stored bytes, built from a valid two-subblock
