@@ -13,7 +13,7 @@ A high-performance Windows Shell extension and lightweight viewer for astronomic
 ## Features
 
 - **Windows Explorer Thumbnails**: Native `IThumbnailProvider` shell extension providing fast, high-quality thumbnails directly in File Explorer.
-- **Windows Preview Pane**: Native `IPreviewHandler` integration to view full uncompressed images in the Explorer preview pane (`Alt + P`).
+- **Windows Preview Pane**: Native `IPreviewHandler` integration to view full-resolution images in the Explorer preview pane (`Alt + P`).
 - **PixInsight-Compliant AutoSTF**: Implements PixInsight's Screen Transfer Function auto-stretch (spec section 8.5.7) using median and MAD statistics. RGB images are stretched per channel (unlinked), which neutralizes color casts on linear frames; the viewer's histogram panel shows the R/G/B values ("Auto (per channel)") and switches to a linked stretch as soon as you drag a slider.
 - **High-Performance I/O Engine**: Sequential bulk reads straight into memory (thumbnails seek and read only the rows they need) and parallelized decoding for fast loading of multi-megapixel CCD/CMOS raw frames.
 - **Standalone FastViewer**:
@@ -28,9 +28,11 @@ A high-performance Windows Shell extension and lightweight viewer for astronomic
 
 | Format | Extensions | Bit Depths / Data Types |
 |---|---|---|
-| **XISF** | `.xisf` | 8-bit UInt, 16-bit UInt, 32-bit Float (Planar & Interleaved, uncompressed) |
+| **XISF** | `.xisf` | 8-bit UInt, 16-bit UInt, 32-bit Float (Planar & Interleaved; uncompressed or zlib, lz4, lz4hc, with or without byte shuffling) |
 | **FITS** | `.fits`, `.fit`, `.fts` | 8-bit UInt, 16-bit Int/UInt (BZERO/BSCALE), 32-bit Int, -32 IEEE Float |
 | **FITS (tile-compressed)** | `.fits`, `.fit`, `.fts` | RICE_1, 32-bit integer, one row per tile, lossless (e.g. HOPS output) |
+
+XISF image data and embedded thumbnails may be uncompressed or compressed with zlib, lz4 or lz4hc, with or without byte shuffling (`+sh`). zstd compression is not supported yet: zstd-compressed images get no preview or thumbnail, and a zstd-compressed embedded thumbnail is skipped in favour of the main image.
 
 Tile-compressed FITS frames above 16 megapixels are not decoded: no preview or thumbnail is produced for them.
 

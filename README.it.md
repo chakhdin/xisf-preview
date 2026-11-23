@@ -28,9 +28,11 @@ Estensione ad alte prestazioni per la Shell di Windows e visualizzatore rapido p
 
 | Formato | Estensioni | Profondità Bit / Tipi di Dato |
 |---|---|---|
-| **XISF** | `.xisf` | UInt 8-bit, UInt 16-bit, Float 32-bit (Planar e Interleaved, non compresso) |
+| **XISF** | `.xisf` | UInt 8-bit, UInt 16-bit, Float 32-bit (Planar e Interleaved; non compresso o zlib, lz4, lz4hc, con o senza byte shuffling) |
 | **FITS** | `.fits`, `.fit`, `.fts` | UInt 8-bit, Int/UInt 16-bit (con BZERO/BSCALE), Int 32-bit, Float IEEE -32 |
 | **FITS (compresso a tile)** | `.fits`, `.fit`, `.fts` | RICE_1, intero 32-bit, una riga per tile, senza perdita (es. output di HOPS) |
+
+I dati immagine XISF e le miniature incorporate possono essere non compressi o compressi con zlib, lz4 o lz4hc, con o senza byte shuffling (`+sh`). La compressione zstd non è ancora supportata: per le immagini compresse con zstd non viene generata alcuna anteprima né miniatura, e una miniatura incorporata compressa con zstd viene ignorata a favore dell'immagine principale.
 
 I frame FITS compressi a tile oltre i 16 megapixel non vengono decodificati: per questi file non viene generata alcuna anteprima né miniatura.
 
